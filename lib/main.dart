@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/theme.dart';
-import 'features/auth/auth_view_model.dart';
-import 'features/auth/login_screen.dart';
-import 'features/dashboard/dashboard_screen.dart';
+import 'features/auth/auth_oficial_view_model.dart';
+import 'features/auth/login_oficial_screen.dart';
+import 'features/cartera/cartera_diaria_screen.dart';
+import 'features/cartera/cartera_view_model.dart';
 import 'core/services/connectivity_service.dart';
 import 'core/services/sync_service.dart';
 
@@ -19,18 +20,19 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthViewModel()),
+        ChangeNotifierProvider(create: (_) => AuthOficialViewModel()),
+        ChangeNotifierProvider(create: (_) => CarteraViewModel()),
         ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
         ChangeNotifierProvider(create: (_) => SyncProvider()),
       ],
-      child: Consumer<AuthViewModel>(
-        builder: (context, authVM, _) {
+      child: Consumer<AuthOficialViewModel>(
+        builder: (context, authOficialVM, _) {
           return MaterialApp(
             title: 'Caja Arequipa - Fuerza de Ventas',
             theme: AppTheme.lightTheme,
             debugShowCheckedModeBanner: false,
-            // Simple session routing
-            home: authVM.isSuccess ? const DashboardScreen() : const LoginScreen(),
+            // Session routing for official portal
+            home: authOficialVM.isSuccess ? const CarteraDiariaScreen() : const LoginOficialScreen(),
           );
         },
       ),
