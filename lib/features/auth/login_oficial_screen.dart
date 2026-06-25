@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../core/theme.dart';
 import 'auth_oficial_view_model.dart';
 import '../cartera/cartera_diaria_screen.dart';
-import 'login_screen.dart'; // To reuse the CajaArequipaLogo widget
 
 class LoginOficialScreen extends StatefulWidget {
   const LoginOficialScreen({super.key});
@@ -228,4 +227,109 @@ class _LoginOficialScreenState extends State<LoginOficialScreen> {
       ),
     );
   }
+}
+
+// Widget that paints the geometric Caja Arequipa Isotype
+class CajaArequipaLogo extends StatelessWidget {
+  final double size;
+  const CajaArequipaLogo({super.key, this.size = 90});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // The Isotype: a colorful geometric arch shape
+        SizedBox(
+          width: size,
+          height: size * 0.7,
+          child: CustomPaint(
+            painter: IsotypePainter(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Logo Text
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: const [
+            Text(
+              'caja',
+              style: TextStyle(
+                color: AppColors.blancoPuro,
+                fontSize: 26,
+                fontWeight: FontWeight.w300,
+                letterSpacing: 0.5,
+              ),
+            ),
+            SizedBox(width: 4),
+            Text(
+              'arequipa',
+              style: TextStyle(
+                color: AppColors.turquesaBrillante,
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class IsotypePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width;
+    final double h = size.height;
+    
+    // We draw the corporate logo: a stylized geometric roof/triangles arch made of different colored blocks
+    final paint = Paint()
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
+    // Define colors of isotype segments
+    final List<Color> colors = [
+      AppColors.rojoCoral,      // #D93D41
+      AppColors.naranjaOcre,    // #C67A43
+      AppColors.amarilloMostaza, // #FF9E1B
+      AppColors.verdeCesped,    // #1FA02F
+      AppColors.turquesaOscuro,  // #008EA7
+    ];
+
+    // Drawing a stylized geometric crown/roof shape: 5 bars
+    final double barWidth = w / 7;
+    final double spacing = barWidth * 0.2;
+    
+    // Position of bars
+    for (int i = 0; i < 5; i++) {
+      paint.color = colors[i];
+      
+      // Calculate heights to form a roof structure (low sides, high center)
+      double barHeight;
+      if (i == 0 || i == 4) {
+        barHeight = h * 0.45;
+      } else if (i == 1 || i == 3) {
+        barHeight = h * 0.75;
+      } else {
+        barHeight = h * 1.0;
+      }
+
+      final double x = (w - (5 * barWidth + 4 * spacing)) / 2 + i * (barWidth + spacing);
+      final double y = h - barHeight;
+
+      // Draw each bar as a rounded rectangle
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, y, barWidth, barHeight),
+        Radius.circular(barWidth / 2),
+      );
+      canvas.drawRRect(rect, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

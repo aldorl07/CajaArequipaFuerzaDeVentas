@@ -1,7 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme.dart';
-import '../../core/services/database_helper.dart';
 
 class EstadoSolicitudesScreen extends StatefulWidget {
   const EstadoSolicitudesScreen({super.key});
@@ -14,19 +15,40 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
   List<Map<String, dynamic>> _requests = [];
   bool _isLoading = true;
   String _selectedFilter = 'Todos'; // 'Todos', 'Pendientes', 'Evaluación', 'Aprobados'
+  StreamSubscription<QuerySnapshot>? _subscription;
 
   @override
   void initState() {
     super.initState();
-    _loadRequests();
+    _listenToRequests();
   }
 
-  Future<void> _loadRequests() async {
-    setState(() => _isLoading = true);
-    final reqs = await DatabaseHelper.instance.getCreditRequests();
-    setState(() {
-      _requests = reqs;
-      _isLoading = false;
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  void _listenToRequests() {
+    _subscription?.cancel();
+    _subscription = FirebaseFirestore.instance
+        .collection('credit_requests')
+        .orderBy('created_at', descending: true)
+        .snapshots()
+        .listen((snapshot) {
+      setState(() {
+        _requests = snapshot.docs.map((doc) {
+          final data = doc.data();
+          return {
+            ...data,
+            'id_doc': doc.id,
+          };
+        }).toList();
+        _isLoading = false;
+      });
+    }, onError: (e) {
+      debugPrint('Error streaming requests: $e');
+      setState(() => _isLoading = false);
     });
   }
 
@@ -46,20 +68,35 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
     }).toList();
   }
 
-  Future<void> _deleteRequest(int id) async {
-    await DatabaseHelper.instance.deleteCreditRequest(id);
-    _loadRequests();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Solicitud eliminada.')),
-    );
+  Future<void> _deleteRequest(String docId) async {
+    try {
+      await FirebaseFirestore.instance.collection('credit_requests').doc(docId).delete();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Solicitud eliminada de Firestore.')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error deleting request: $e');
+    }
   }
 
   Future<void> _clearAll() async {
-    await DatabaseHelper.instance.clearAllRequests();
-    _loadRequests();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Historial limpiado con éxito.')),
-    );
+    try {
+      final snapshots = await FirebaseFirestore.instance.collection('credit_requests').get();
+      final batch = FirebaseFirestore.instance.batch();
+      for (var doc in snapshots.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Historial de Firestore limpiado con éxito.')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error clearing Firestore collection: $e');
+    }
   }
 
   @override
@@ -123,7 +160,7 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
                       ),
                     )
                   : RefreshIndicator(
-                      onRefresh: _loadRequests,
+                      onRefresh: () async => _listenToRequests(),
                       color: AppColors.turquesaBrillante,
                       child: ListView.builder(
                         physics: const AlwaysScrollableScrollPhysics(),
@@ -167,10 +204,10 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
   }
 
   Widget _buildRequestCard(Map<String, dynamic> req) {
-    final int id = req['id'];
+    final String idDoc = req['id_doc'] ?? '';
     final String clientName = req['client_name'] ?? 'Cliente';
     final String clientDni = req['client_dni'] ?? '--------';
-    final double amount = req['amount'] ?? 0.0;
+    final double amount = (req['amount'] as num?)?.toDouble() ?? 0.0;
     final int term = req['term_months'] ?? 12;
     final String status = req['status'] ?? 'Draft';
     final String createdAtStr = req['created_at'] ?? '';
@@ -236,7 +273,7 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
 
     return Card(
       child: ExpansionTile(
-        key: PageStorageKey<int>(id),
+        key: PageStorageKey<String>(idDoc),
         leading: CircleAvatar(
           backgroundColor: statusColor.withOpacity(0.12),
           child: Icon(statusIcon, color: statusColor, size: 20),
@@ -273,7 +310,7 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
                   children: [
                     Text('Captura: $dateFormatted', style: const TextStyle(fontSize: 11, color: AppColors.textoMutado)),
                     TextButton.icon(
-                      onPressed: () => _deleteRequest(id),
+                      onPressed: () => _deleteRequest(idDoc),
                       icon: const Icon(Icons.delete_outline, size: 14, color: AppColors.rojoCoral),
                       label: const Text('Eliminar', style: TextStyle(color: AppColors.rojoCoral, fontSize: 11)),
                     ),

@@ -2,8 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme.dart';
-import '../../core/services/database_helper.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/sync_service.dart';
 
@@ -64,15 +64,19 @@ class _NuevaSolicitudScreenState extends State<NuevaSolicitudScreen> {
   }
 
   Future<void> _autoFillClientDetails(String dni) async {
-    final client = await DatabaseHelper.instance.getClientByDni(dni);
-    if (client != null) {
-      setState(() {
-        _nameController.text = client['name'] ?? '';
-        final double sugAmount = client['credit_renewal_amount'] ?? 10000.0;
-        _amountController.text = sugAmount.toStringAsFixed(0);
-        // Default mock income
-        _incomeController.text = '2500';
-      });
+    try {
+      final doc = await FirebaseFirestore.instance.collection('clients').doc(dni).get();
+      if (doc.exists) {
+        final data = doc.data()!;
+        setState(() {
+          _nameController.text = data['name'] ?? '';
+          final double sugAmount = (data['credit_renewal_amount'] as num?)?.toDouble() ?? 10000.0;
+          _amountController.text = sugAmount.toStringAsFixed(0);
+          _incomeController.text = '2500';
+        });
+      }
+    } catch (e) {
+      debugPrint('Error autofilling client details from Firestore: $e');
     }
   }
 
@@ -197,9 +201,9 @@ class _NuevaSolicitudScreenState extends State<NuevaSolicitudScreen> {
     final connProv = Provider.of<ConnectivityProvider>(context, listen: false);
     final syncProv = Provider.of<SyncProvider>(context, listen: false);
 
-    // Create Request map object
+    final String dni = _dniController.text;
     final Map<String, dynamic> request = {
-      'client_dni': _dniController.text,
+      'client_dni': dni,
       'client_name': _nameController.text,
       'amount': double.parse(_amountController.text),
       'term_months': int.parse(_selectedTerm),
@@ -209,12 +213,16 @@ class _NuevaSolicitudScreenState extends State<NuevaSolicitudScreen> {
       'bureau_rating': _bureauRating,
       'doc_front_path': _docFrontPath,
       'doc_back_path': _docBackPath,
-      'status': connProv.isOnline ? 'Sent' : 'PendingSync', // Online gets sent immediately, Offline gets queued
+      'status': connProv.isOnline ? 'Sent' : 'PendingSync', // Online goes sent immediately, Offline gets queued
       'created_at': DateTime.now().toIso8601String(),
     };
 
-    // Save to SQLite
-    await DatabaseHelper.instance.insertCreditRequest(request);
+    // Save directly to Firestore (Firestore supports offline persistence natively)
+    try {
+      await FirebaseFirestore.instance.collection('credit_requests').doc(dni).set(request);
+    } catch (e) {
+      debugPrint('Firestore save error (queued offline): $e');
+    }
 
     if (!mounted) return;
 
@@ -228,11 +236,11 @@ class _NuevaSolicitudScreenState extends State<NuevaSolicitudScreen> {
         ),
       );
     } else {
-      // Queue locally
+      // Queue locally in provider count
       await syncProv.updatePendingCount();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Sin conexión. Solicitud guardada localmente en la cola de sincronización.'),
+          content: Text('Sin conexión. Solicitud guardada localmente en Firestore (se sincronizará automáticamente).'),
           backgroundColor: AppColors.amarilloMostaza,
         ),
       );

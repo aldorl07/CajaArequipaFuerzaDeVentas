@@ -9,6 +9,7 @@ import 'features/cartera/cartera_diaria_screen.dart';
 import 'features/cartera/cartera_view_model.dart';
 import 'core/services/connectivity_service.dart';
 import 'core/services/sync_service.dart';
+import 'core/services/firebase_seeder.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,6 +17,7 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    await FirebaseSeeder.seedDatabase();
   } catch (e) {
     debugPrint('Firebase initialization failed: $e');
   }

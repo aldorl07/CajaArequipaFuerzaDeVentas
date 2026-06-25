@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme.dart';
-import '../../core/services/database_helper.dart';
 
 class RutaScreen extends StatefulWidget {
   const RutaScreen({super.key});
@@ -33,14 +33,23 @@ class _RutaScreenState extends State<RutaScreen> with SingleTickerProviderStateM
 
   Future<void> _loadRoute() async {
     setState(() => _isLoading = true);
-    final clients = await DatabaseHelper.instance.getClients();
-    // Filter clients with scheduled visit for today (2026-06-26)
-    final todayClients = clients.where((c) => c['visit_scheduled'] == '2026-06-26').toList();
-    
-    setState(() {
-      _routeClients = todayClients;
-      _isLoading = false;
-    });
+    try {
+      final qs = await FirebaseFirestore.instance
+          .collection('clients')
+          .orderBy('visit_order', descending: false)
+          .get();
+      
+      final clients = qs.docs.map((doc) => doc.data()).toList();
+      final todayClients = clients.where((c) => c['visit_scheduled'] == '2026-06-26').toList();
+      
+      setState(() {
+        _routeClients = todayClients;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading route from Firestore: $e');
+      setState(() => _isLoading = false);
+    }
   }
 
   void _optimizeRoute() {

@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'database_helper.dart';
 
 class SyncProvider extends ChangeNotifier {
   bool _isSyncing = false;
@@ -19,16 +18,33 @@ class SyncProvider extends ChangeNotifier {
   }
 
   Future<void> updatePendingCount() async {
-    final pending = await DatabaseHelper.instance.getPendingCreditRequests();
-    _pendingCount = pending.length;
+    try {
+      final qs = await FirebaseFirestore.instance
+          .collection('credit_requests')
+          .where('status', isEqualTo: 'PendingSync')
+          .get(const GetOptions(source: Source.cache));
+      _pendingCount = qs.docs.length;
+    } catch (_) {
+      _pendingCount = 0;
+    }
     notifyListeners();
   }
 
   Future<void> syncPendingRequests(bool isOnline) async {
     if (!isOnline || _isSyncing) return;
 
-    final pendingRequests = await DatabaseHelper.instance.getPendingCreditRequests();
-    if (pendingRequests.isEmpty) {
+    List<QueryDocumentSnapshot> docs = [];
+    try {
+      final qs = await FirebaseFirestore.instance
+          .collection('credit_requests')
+          .where('status', isEqualTo: 'PendingSync')
+          .get(const GetOptions(source: Source.cache));
+      docs = qs.docs;
+    } catch (e) {
+      debugPrint('Error fetching cache requests: $e');
+    }
+
+    if (docs.isEmpty) {
       _pendingCount = 0;
       notifyListeners();
       return;
@@ -38,14 +54,19 @@ class SyncProvider extends ChangeNotifier {
     _syncMessage = 'Iniciando sincronización de ${_pendingCount} solicitudes...';
     notifyListeners();
 
-    for (var req in pendingRequests) {
-      final int id = req['id'];
+    for (var docSnapshot in docs) {
+      final req = docSnapshot.data() as Map<String, dynamic>;
       final String clientName = req['client_name'] ?? 'Cliente';
       final String clientDni = req['client_dni'] ?? '--------';
 
       // Step 1: Syncing
       _syncMessage = 'Sincronizando expediente de: $clientName...';
-      await DatabaseHelper.instance.updateRequestStatus(id, 'Syncing');
+      try {
+        await FirebaseFirestore.instance
+            .collection('credit_requests')
+            .doc(clientDni)
+            .update({'status': 'Syncing'});
+      } catch (_) {}
       notifyListeners();
 
       // --- FIREBASE STORAGE UPLOAD ---
@@ -83,42 +104,37 @@ class SyncProvider extends ChangeNotifier {
         _syncMessage = 'Registrando solicitud en Firestore...';
         notifyListeners();
 
-        // Prepare Firestore payload matching the SQLite data
-        final Map<String, dynamic> firestorePayload = {
-          'id': id,
-          'client_dni': req['client_dni'],
-          'client_name': req['client_name'],
-          'amount': req['amount'],
-          'term_months': req['term_months'],
-          'destination': req['destination'],
-          'monthly_income': req['monthly_income'],
-          'bureau_score': req['bureau_score'],
-          'bureau_rating': req['bureau_rating'],
-          'doc_front_url': firestoreFrontUrl ?? 'local_path:${req['doc_front_path']}',
-          'doc_back_url': firestoreBackUrl ?? 'local_path:${req['doc_back_path']}',
-          'created_at': req['created_at'],
-          'synchronized_at': FieldValue.serverTimestamp(),
-          'officer_code': 'OF12345',
-        };
-
-        // Write to Firestore under 'credit_requests'
         await FirebaseFirestore.instance
             .collection('credit_requests')
             .doc(clientDni)
-            .set(firestorePayload);
+            .update({
+          if (firestoreFrontUrl != null) 'doc_front_url': firestoreFrontUrl,
+          if (firestoreBackUrl != null) 'doc_back_url': firestoreBackUrl,
+          'synchronized_at': FieldValue.serverTimestamp(),
+        });
       } catch (e) {
         debugPrint('Firebase Firestore upload failed: $e');
       }
 
       // Step 2: Sent (Enviado)
       _syncMessage = 'Expediente de $clientName enviado al Core Bancario.';
-      await DatabaseHelper.instance.updateRequestStatus(id, 'Enviado');
+      try {
+        await FirebaseFirestore.instance
+            .collection('credit_requests')
+            .doc(clientDni)
+            .update({'status': 'Enviado'});
+      } catch (_) {}
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 1000));
 
       // Step 3: En Evaluación
       _syncMessage = 'Analizando capacidad de pago e historial en Buró...';
-      await DatabaseHelper.instance.updateRequestStatus(id, 'En Evaluación');
+      try {
+        await FirebaseFirestore.instance
+            .collection('credit_requests')
+            .doc(clientDni)
+            .update({'status': 'En Evaluación'});
+      } catch (_) {}
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 1200));
 
@@ -126,17 +142,24 @@ class SyncProvider extends ChangeNotifier {
       final int score = req['bureau_score'] ?? 700;
       if (score < 400) {
         _syncMessage = 'Solicitud de $clientName evaluada: Rechazada por bajo score.';
-        await DatabaseHelper.instance.updateRequestStatus(id, 'Rechazado');
+        try {
+          await FirebaseFirestore.instance
+              .collection('credit_requests')
+              .doc(clientDni)
+              .update({'status': 'Rechazado'});
+        } catch (_) {}
       } else {
         _syncMessage = 'Solicitud de $clientName Aprobada!';
-        await DatabaseHelper.instance.updateRequestStatus(id, 'Aprobado');
+        try {
+          await FirebaseFirestore.instance
+              .collection('credit_requests')
+              .doc(clientDni)
+              .update({'status': 'Aprobado'});
+        } catch (_) {}
         notifyListeners();
         await Future.delayed(const Duration(milliseconds: 1000));
 
         _syncMessage = 'Crédito de $clientName Desembolsado con éxito.';
-        await DatabaseHelper.instance.updateRequestStatus(id, 'Desembolsado');
-        
-        // Update Firestore status to match
         try {
           await FirebaseFirestore.instance
               .collection('credit_requests')

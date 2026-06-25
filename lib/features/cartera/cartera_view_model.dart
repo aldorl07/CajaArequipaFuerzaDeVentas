@@ -1,10 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class VisitClient {
   final String dni;
   final String name;
   final String managementType; // 'Renovación', 'Nuevo', 'Cobranza'
-  bool isVisited; // false = pendiente, true = visitado
+  final bool isVisited; // false = pendiente, true = visitado
   final double amount;
   final String address;
 
@@ -16,51 +18,22 @@ class VisitClient {
     required this.amount,
     required this.address,
   });
+
+  factory VisitClient.fromMap(Map<String, dynamic> map) {
+    return VisitClient(
+      dni: map['dni'] ?? '',
+      name: map['name'] ?? '',
+      managementType: map['managementType'] ?? 'Renovación',
+      isVisited: map['isVisited'] ?? false,
+      amount: (map['credit_renewal_amount'] as num?)?.toDouble() ?? 0.0,
+      address: map['address'] ?? '',
+    );
+  }
 }
 
 class CarteraViewModel extends ChangeNotifier {
-  final List<VisitClient> _clients = [
-    VisitClient(
-      dni: '45892147',
-      name: 'María Elena Flores Mamani',
-      managementType: 'Renovación',
-      isVisited: false,
-      amount: 15000.0,
-      address: 'Av. Dolores 124, José Luis Bustamante y Rivero',
-    ),
-    VisitClient(
-      dni: '10235698',
-      name: 'Juan Carlos Quispe Huamaní',
-      managementType: 'Renovación',
-      isVisited: false,
-      amount: 25000.0,
-      address: 'Calle Melgar 302, Cercado',
-    ),
-    VisitClient(
-      dni: '29654123',
-      name: 'Rosa Luz Choque Condori',
-      managementType: 'Nuevo',
-      isVisited: false,
-      amount: 8000.0,
-      address: 'Mercado El Altiplano, Puesto 45, Miraflores',
-    ),
-    VisitClient(
-      dni: '09874512',
-      name: 'Pedro Abelardo Mendoza Zúñiga',
-      managementType: 'Cobranza',
-      isVisited: false,
-      amount: 12500.0,
-      address: 'Jr. Puno 415, Yanahuara',
-    ),
-    VisitClient(
-      dni: '41236987',
-      name: 'Carmen Rosa Apaza Vargas',
-      managementType: 'Cobranza',
-      isVisited: false,
-      amount: 4800.0,
-      address: 'Asoc. Apipa Sector 3 Mz. D Lote 12, Cerro Colorado',
-    ),
-  ];
+  List<VisitClient> _clients = [];
+  StreamSubscription<QuerySnapshot>? _subscription;
 
   List<VisitClient> get clients => _clients;
 
@@ -70,18 +43,57 @@ class CarteraViewModel extends ChangeNotifier {
   
   int get pendingVisits => _clients.where((c) => !c.isVisited).length;
 
-  void toggleVisitStatus(int index) {
-    if (index >= 0 && index < _clients.length) {
-      _clients[index].isVisited = !_clients[index].isVisited;
+  CarteraViewModel() {
+    _listenToClients();
+  }
+
+  void _listenToClients() {
+    _subscription?.cancel();
+    _subscription = FirebaseFirestore.instance
+        .collection('clients')
+        .orderBy('visit_order', descending: false)
+        .snapshots()
+        .listen((snapshot) {
+      _clients = snapshot.docs
+          .map((doc) => VisitClient.fromMap(doc.data() as Map<String, dynamic>))
+          .toList();
       notifyListeners();
+    }, onError: (error) {
+      debugPrint('Error listening to clients: $error');
+    });
+  }
+
+  Future<void> toggleVisitStatus(int index) async {
+    if (index >= 0 && index < _clients.length) {
+      final client = _clients[index];
+      final newStatus = !client.isVisited;
+      
+      // Update in Firestore (works offline natively)
+      try {
+        await FirebaseFirestore.instance
+            .collection('clients')
+            .doc(client.dni)
+            .update({'isVisited': newStatus});
+      } catch (e) {
+        debugPrint('Error toggling visit status: $e');
+      }
     }
   }
 
-  void setVisited(String dni, bool isVisited) {
-    final clientIndex = _clients.indexWhere((c) => c.dni == dni);
-    if (clientIndex != -1) {
-      _clients[clientIndex].isVisited = isVisited;
-      notifyListeners();
+  Future<void> setVisited(String dni, bool isVisited) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('clients')
+          .doc(dni)
+          .update({'isVisited': isVisited});
+    } catch (e) {
+      debugPrint('Error setting visited: $e');
     }
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
   }
 }

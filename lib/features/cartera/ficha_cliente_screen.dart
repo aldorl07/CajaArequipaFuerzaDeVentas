@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme.dart';
-import '../../core/services/database_helper.dart';
 import '../solicitud/nueva_solicitud_screen.dart';
 
 class FichaClienteScreen extends StatefulWidget {
@@ -23,11 +23,29 @@ class _FichaClienteScreenState extends State<FichaClienteScreen> {
 
   Future<void> _loadClientDetails() async {
     setState(() => _isLoading = true);
-    final client = await DatabaseHelper.instance.getClientByDni(widget.clientDni);
-    setState(() {
-      _client = client;
-      _isLoading = false;
-    });
+    try {
+      final docSnapshot = await FirebaseFirestore.instance
+          .collection('clients')
+          .doc(widget.clientDni)
+          .get();
+      if (docSnapshot.exists) {
+        setState(() {
+          _client = docSnapshot.data();
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _client = null;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading client from Firestore: $e');
+      setState(() {
+        _client = null;
+        _isLoading = false;
+      });
+    }
   }
 
   @override
