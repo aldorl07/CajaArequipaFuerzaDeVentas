@@ -8,6 +8,10 @@ import 'ficha_cliente_screen.dart';
 import '../ruta/ruta_screen.dart';
 import '../solicitud/estado_solicitudes_screen.dart';
 import '../solicitud/nueva_solicitud_screen.dart';
+import '../solicitud/simulador_credito_screen.dart';
+import '../solicitud/borradores_screen.dart';
+import '../cobranza/recuperacion_mora_screen.dart';
+import '../reportes/reportes_supervision_screen.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/sync_service.dart';
 
@@ -26,6 +30,224 @@ class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
     'Planificación de Ruta',
     'Estado de Solicitudes',
   ];
+
+  void _navigateToTab(int index) {
+    Navigator.of(context).pop(); // Close drawer
+    setState(() {
+      _currentIndex = index;
+    });
+  }
+
+  void _navigateToScreen(Widget screen) {
+    Navigator.of(context).pop(); // Close drawer
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => screen),
+    );
+  }
+
+  void _confirmLogout(BuildContext context, AuthOficialViewModel authVM, SyncProvider syncProv) {
+    Navigator.of(context).pop(); // Close drawer
+    final pending = syncProv.pendingCount;
+
+    if (pending > 0) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Solicitudes Pendientes'),
+          content: Text('Tiene $pending expedientes guardados localmente pendientes de transmisión.\n\n¿Está seguro de cerrar sesión de todos modos? Se podrían perder estos datos.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('CANCELAR'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.rojoCoral),
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                await authVM.logout();
+                if (context.mounted) {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => const LoginOficialScreen()),
+                  );
+                }
+              },
+              child: const Text('CERRAR DE TODOS MODOS', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Cerrar Sesión'),
+          content: const Text('¿Desea cerrar la sesión del portal de crédito?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('CANCELAR'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                await authVM.logout();
+                if (context.mounted) {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => const LoginOficialScreen()),
+                  );
+                }
+              },
+              child: const Text('CERRAR SESIÓN'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Widget _buildDrawer(BuildContext context, AuthOficialViewModel authVM, SyncProvider syncProv) {
+    final role = authVM.userRole;
+    final isSupervisor = role == 'Supervisor' || role == 'Administrador';
+
+    return Drawer(
+      backgroundColor: AppColors.blancoPuro,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          UserAccountsDrawerHeader(
+            decoration: const BoxDecoration(
+              color: AppColors.azulMarino,
+            ),
+            currentAccountPicture: CircleAvatar(
+              backgroundColor: AppColors.turquesaBrillante,
+              child: Text(
+                authVM.officerName?.substring(0, 2).toUpperCase() ?? 'OF',
+                style: const TextStyle(color: AppColors.azulMarino, fontWeight: FontWeight.bold, fontSize: 20),
+              ),
+            ),
+            accountName: Text(
+              authVM.officerName ?? 'Aldo Requena',
+              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
+            ),
+            accountEmail: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Código: ${authVM.employeeCode ?? "OF12345"}',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+                const SizedBox(height: 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isSupervisor ? AppColors.amarilloMostaza : AppColors.turquesaOscuro,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    role.toUpperCase(),
+                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.people_outline, color: AppColors.azulMarino),
+                  title: const Text('Mi Cartera Diaria', style: TextStyle(color: AppColors.textoOscuro)),
+                  onTap: () => _navigateToTab(0),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.map_outlined, color: AppColors.azulMarino),
+                  title: const Text('Planificación de Ruta', style: TextStyle(color: AppColors.textoOscuro)),
+                  onTap: () => _navigateToTab(1),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.assignment_outlined, color: AppColors.azulMarino),
+                  title: const Text('Estado de Solicitudes', style: TextStyle(color: AppColors.textoOscuro)),
+                  onTap: () => _navigateToTab(2),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.folder_open_outlined, color: AppColors.azulMarino),
+                  title: const Text('Borradores de Solicitud', style: TextStyle(color: AppColors.textoOscuro)),
+                  onTap: () => _navigateToScreen(const BorradoresScreen()),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.calculate_outlined, color: AppColors.azulMarino),
+                  title: const Text('Simulador de Crédito', style: TextStyle(color: AppColors.textoOscuro)),
+                  onTap: () => _navigateToScreen(const SimuladorCreditoScreen()),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.payments_outlined, color: AppColors.azulMarino),
+                  title: const Text('Recuperación de Mora (Cobranza)', style: TextStyle(color: AppColors.textoOscuro)),
+                  onTap: () => _navigateToScreen(const RecuperacionMoraScreen()),
+                ),
+                if (isSupervisor) ...[
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.bar_chart_outlined, color: AppColors.amarilloMostaza),
+                    title: const Text('Reportes y Supervisión', style: TextStyle(color: AppColors.textoOscuro, fontWeight: FontWeight.bold)),
+                    onTap: () => _navigateToScreen(const ReportesSupervisionScreen()),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (syncProv.pendingCount > 0)
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.amarilloMostaza.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: AppColors.amarilloMostaza, width: 0.5),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.sync_problem, color: AppColors.amarilloMostaza, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${syncProv.pendingCount} pendientes de envío',
+                            style: const TextStyle(fontSize: 10, color: AppColors.textoOscuro, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.rojoCoral,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  icon: const Icon(Icons.logout, size: 18),
+                  label: const Text('CERRAR SESIÓN'),
+                  onPressed: () => _confirmLogout(context, authVM, syncProv),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Caja Arequipa Movilidad v1.2',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.textoMutado, fontSize: 10),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,20 +302,9 @@ class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
               ),
             ],
           ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Cerrar Sesión',
-            onPressed: () async {
-              await authVM.logout();
-              if (context.mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const LoginOficialScreen()),
-                );
-              }
-            },
-          ),
         ],
       ),
+      drawer: _buildDrawer(context, authVM, syncProv),
       body: Column(
         children: [
           // Offline Banner Indicator

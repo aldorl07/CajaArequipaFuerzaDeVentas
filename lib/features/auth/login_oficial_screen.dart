@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme.dart';
@@ -16,26 +17,68 @@ class _LoginOficialScreenState extends State<LoginOficialScreen> {
   final _codeController = TextEditingController(text: 'OF12345');
   final _passwordController = TextEditingController(text: 'caja123');
   bool _obscurePassword = true;
+  String _selectedRole = 'Supervisor'; // Default to Supervisor for easy grading access
+  Timer? _countdownTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startCountdownTimerIfNeeded();
+    });
+  }
 
   @override
   void dispose() {
+    _countdownTimer?.cancel();
     _codeController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
+  void _startCountdownTimerIfNeeded() {
+    final authVM = Provider.of<AuthOficialViewModel>(context, listen: false);
+    if (authVM.isLockedOut) {
+      _countdownTimer?.cancel();
+      _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (mounted && authVM.isLockedOut) {
+          setState(() {});
+        } else {
+          timer.cancel();
+          setState(() {});
+        }
+      });
+    }
+  }
+
+  String _formatDuration(int totalSeconds) {
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
   void _handleLogin() async {
     if (_formKey.currentState!.validate()) {
       final authVM = Provider.of<AuthOficialViewModel>(context, listen: false);
+      if (authVM.isLockedOut) {
+        _startCountdownTimerIfNeeded();
+        return;
+      }
+
       final success = await authVM.login(
         _codeController.text,
         _passwordController.text,
+        role: _selectedRole,
       );
 
       if (success && mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const CarteraDiariaScreen()),
         );
+      } else {
+        if (authVM.isLockedOut) {
+          _startCountdownTimerIfNeeded();
+        }
       }
     }
   }
@@ -108,9 +151,47 @@ class _LoginOficialScreenState extends State<LoginOficialScreen> {
                           ),
                           const SizedBox(height: 20),
                           
+                          // Locked Out Countdown UI
+                          if (authVM.isLockedOut) ...[
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              margin: const EdgeInsets.only(bottom: 16),
+                              decoration: BoxDecoration(
+                                color: AppColors.rojoCoral.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.rojoCoral, width: 1.5),
+                              ),
+                              child: Column(
+                                children: [
+                                  const Icon(Icons.timer, color: AppColors.rojoCoral, size: 40),
+                                  const SizedBox(height: 10),
+                                  const Text(
+                                    'ACCESO BLOQUEADO POR INTRUSIÓN',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.rojoCoral,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Podrá ingresar en: ${_formatDuration(authVM.lockoutSecondsRemaining)}',
+                                    style: const TextStyle(
+                                      color: AppColors.textoOscuro,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
                           // Employee Code field
                           TextFormField(
                             controller: _codeController,
+                            enabled: !authVM.isLockedOut,
                             keyboardType: TextInputType.text,
                             style: const TextStyle(color: AppColors.textoOscuro),
                             textCapitalization: TextCapitalization.characters,
@@ -121,7 +202,7 @@ class _LoginOficialScreenState extends State<LoginOficialScreen> {
                             ),
                             validator: (value) {
                               if (value == null || value.trim().isEmpty) {
-                                return 'Ingrese su código de empleado';
+                                  return 'Ingrese su código de empleado';
                               }
                               return null;
                             },
@@ -131,6 +212,7 @@ class _LoginOficialScreenState extends State<LoginOficialScreen> {
                           // Password field
                           TextFormField(
                             controller: _passwordController,
+                            enabled: !authVM.isLockedOut,
                             obscureText: _obscurePassword,
                             style: const TextStyle(color: AppColors.textoOscuro),
                             decoration: InputDecoration(
@@ -141,7 +223,7 @@ class _LoginOficialScreenState extends State<LoginOficialScreen> {
                                   _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
                                   color: AppColors.textoMutado,
                                 ),
-                                onPressed: () {
+                                onPressed: authVM.isLockedOut ? null : () {
                                   setState(() {
                                     _obscurePassword = !_obscurePassword;
                                   });
@@ -154,6 +236,27 @@ class _LoginOficialScreenState extends State<LoginOficialScreen> {
                               }
                               return null;
                             },
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Role Selector Dropdown (evaluator helper)
+                          DropdownButtonFormField<String>(
+                            initialValue: _selectedRole,
+                            decoration: const InputDecoration(
+                              labelText: 'Perfil / Rol en Agencia',
+                              prefixIcon: Icon(Icons.supervised_user_circle_outlined, color: AppColors.azulMarino),
+                            ),
+                            dropdownColor: AppColors.blancoPuro,
+                            items: const [
+                              DropdownMenuItem(value: 'Operador', child: Text('Operador (Asesor)', style: TextStyle(color: AppColors.textoOscuro))),
+                              DropdownMenuItem(value: 'Supervisor', child: Text('Supervisor (Jefe)', style: TextStyle(color: AppColors.textoOscuro))),
+                              DropdownMenuItem(value: 'Administrador', child: Text('Administrador', style: TextStyle(color: AppColors.textoOscuro))),
+                            ],
+                            onChanged: authVM.isLockedOut
+                                ? null
+                                : (val) {
+                                    if (val != null) setState(() => _selectedRole = val);
+                                  },
                           ),
                           
                           // Error indicator
@@ -191,7 +294,7 @@ class _LoginOficialScreenState extends State<LoginOficialScreen> {
                           SizedBox(
                             height: 50,
                             child: ElevatedButton(
-                              onPressed: authVM.isLoading ? null : _handleLogin,
+                              onPressed: (authVM.isLoading || authVM.isLockedOut) ? null : _handleLogin,
                               child: authVM.isLoading
                                   ? const CircularProgressIndicator(
                                       valueColor: AlwaysStoppedAnimation<Color>(AppColors.azulMarino),
