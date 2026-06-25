@@ -141,7 +141,7 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.assignment_outlined, size: 64, color: AppColors.textoMutado.withOpacity(0.5)),
+                          Icon(Icons.assignment_outlined, size: 64, color: AppColors.textoMutado.withValues(alpha: 0.5)),
                           const SizedBox(height: 16),
                           const Text(
                             'No hay solicitudes en esta sección',
@@ -275,7 +275,7 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
       child: ExpansionTile(
         key: PageStorageKey<String>(idDoc),
         leading: CircleAvatar(
-          backgroundColor: statusColor.withOpacity(0.12),
+          backgroundColor: statusColor.withValues(alpha: 0.12),
           child: Icon(statusIcon, color: statusColor, size: 20),
         ),
         title: Text(
@@ -289,7 +289,7 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
         trailing: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: statusColor.withOpacity(0.15),
+            color: statusColor.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Text(

@@ -55,7 +55,7 @@ class CarteraViewModel extends ChangeNotifier {
         .snapshots()
         .listen((snapshot) {
       _clients = snapshot.docs
-          .map((doc) => VisitClient.fromMap(doc.data() as Map<String, dynamic>))
+          .map((doc) => VisitClient.fromMap(doc.data()))
           .toList();
       notifyListeners();
     }, onError: (error) {

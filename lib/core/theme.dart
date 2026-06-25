@@ -27,11 +27,9 @@ class AppTheme {
         secondary: AppColors.turquesaBrillante,
         tertiary: AppColors.amarilloMostaza,
         surface: AppColors.blancoPuro,
-        background: AppColors.grisClaro,
         error: AppColors.rojoCoral,
         onPrimary: AppColors.blancoPuro,
         onSecondary: AppColors.azulMarino,
-        onBackground: AppColors.textoOscuro,
         onSurface: AppColors.textoOscuro,
       ),
       scaffoldBackgroundColor: AppColors.grisClaro,
@@ -101,10 +99,10 @@ class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.blancoPuro,
-        indicatorColor: AppColors.turquesaBrillante.withOpacity(0.2),
+        indicatorColor: AppColors.turquesaBrillante.withValues(alpha: 0.2),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        labelTextStyle: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return const TextStyle(
               color: AppColors.azulMarino,
               fontWeight: FontWeight.bold,
@@ -116,8 +114,8 @@ class AppTheme {
             fontSize: 12,
           );
         }),
-        iconTheme: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return const IconThemeData(color: AppColors.azulMarino);
           }
           return const IconThemeData(color: AppColors.textoMutado);

@@ -86,7 +86,7 @@ class _RutaScreenState extends State<RutaScreen> with SingleTickerProviderStateM
                 height: 250,
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: AppColors.azulMarino.withOpacity(0.95),
+                  color: AppColors.azulMarino.withValues(alpha: 0.95),
                   border: const Border(
                     bottom: BorderSide(color: AppColors.turquesaBrillante, width: 2),
                   ),
@@ -139,7 +139,7 @@ class _RutaScreenState extends State<RutaScreen> with SingleTickerProviderStateM
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: AppColors.azulMarino.withOpacity(0.85),
+                          color: AppColors.azulMarino.withValues(alpha: 0.85),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Column(
@@ -286,7 +286,7 @@ class _RutaScreenState extends State<RutaScreen> with SingleTickerProviderStateM
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: riskColor.withOpacity(0.12),
+                          color: riskColor.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
@@ -347,17 +347,17 @@ class VectorMapPainter extends CustomPainter {
 
     // Paints
     final bgGridPaint = Paint()
-      ..color = AppColors.turquesaBrillante.withOpacity(0.05)
+      ..color = AppColors.turquesaBrillante.withValues(alpha: 0.05)
       ..strokeWidth = 0.5;
 
     final roadPaint = Paint()
-      ..color = Colors.white.withOpacity(0.15)
+      ..color = Colors.white.withValues(alpha: 0.15)
       ..strokeWidth = 4.0
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
     final routeLinePaint = Paint()
-      ..color = AppColors.turquesaBrillante.withOpacity(0.8)
+      ..color = AppColors.turquesaBrillante.withValues(alpha: 0.8)
       ..strokeWidth = 2.5
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -385,7 +385,7 @@ class VectorMapPainter extends CustomPainter {
 
     // Pulse animation around officer
     final pulsePaint = Paint()
-      ..color = AppColors.turquesaBrillante.withOpacity(1.0 - pulseValue)
+      ..color = AppColors.turquesaBrillante.withValues(alpha: 1.0 - pulseValue)
       ..style = PaintingStyle.fill;
     canvas.drawCircle(officerPos, 8.0 + (pulseValue * 14.0), pulsePaint);
 

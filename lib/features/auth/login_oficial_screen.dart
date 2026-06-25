@@ -162,7 +162,7 @@ class _LoginOficialScreenState extends State<LoginOficialScreen> {
                             Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: AppColors.rojoCoral.withOpacity(0.12),
+                                color: AppColors.rojoCoral.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: AppColors.rojoCoral, width: 0.5),
                               ),

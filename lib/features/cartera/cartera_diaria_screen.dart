@@ -67,7 +67,8 @@ class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
               ),
               Switch(
                 value: connProv.isOnline,
-                activeColor: AppColors.turquesaBrillante,
+                activeThumbColor: AppColors.turquesaBrillante,
+                activeTrackColor: AppColors.turquesaBrillante.withValues(alpha: 0.5),
                 inactiveThumbColor: AppColors.rojoCoral,
                 inactiveTrackColor: AppColors.rojoCoral.withValues(alpha: 0.3),
                 onChanged: (val) {
@@ -361,7 +362,8 @@ class CarteraVisitasTab extends StatelessWidget {
                   children: [
                     Switch(
                       value: client.isVisited,
-                      activeColor: AppColors.verdeCesped,
+                      activeThumbColor: AppColors.verdeCesped,
+                      activeTrackColor: AppColors.verdeCesped.withValues(alpha: 0.5),
                       onChanged: (val) {
                         carteraVM.toggleVisitStatus(index);
                       },

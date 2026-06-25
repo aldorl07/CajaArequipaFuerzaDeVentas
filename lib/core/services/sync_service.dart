@@ -51,7 +51,7 @@ class SyncProvider extends ChangeNotifier {
     }
 
     _isSyncing = true;
-    _syncMessage = 'Iniciando sincronización de ${_pendingCount} solicitudes...';
+    _syncMessage = 'Iniciando sincronización de $_pendingCount solicitudes...';
     notifyListeners();
 
     for (var docSnapshot in docs) {
@@ -108,8 +108,8 @@ class SyncProvider extends ChangeNotifier {
             .collection('credit_requests')
             .doc(clientDni)
             .update({
-          if (firestoreFrontUrl != null) 'doc_front_url': firestoreFrontUrl,
-          if (firestoreBackUrl != null) 'doc_back_url': firestoreBackUrl,
+          'doc_front_url': ?firestoreFrontUrl,
+          'doc_back_url': ?firestoreBackUrl,
           'synchronized_at': FieldValue.serverTimestamp(),
         });
       } catch (e) {

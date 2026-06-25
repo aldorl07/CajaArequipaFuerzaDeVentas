@@ -167,7 +167,7 @@ class _FichaClienteScreenState extends State<FichaClienteScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: riskColor.withOpacity(0.15),
+                            color: riskColor.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: riskColor, width: 1),
                           ),
@@ -305,7 +305,7 @@ class _FichaClienteScreenState extends State<FichaClienteScreen> {
                                 width: 14,
                                 height: 14,
                                 decoration: BoxDecoration(
-                                  color: (item['color'] as Color).withOpacity(0.2),
+                                  color: (item['color'] as Color).withValues(alpha: 0.2),
                                   shape: BoxShape.circle,
                                   border: Border.all(color: item['color'] as Color, width: 1.5),
                                 ),
@@ -395,7 +395,7 @@ class _FichaClienteScreenState extends State<FichaClienteScreen> {
     return Row(
       children: [
         CircleAvatar(
-          backgroundColor: iconColor.withOpacity(0.12),
+          backgroundColor: iconColor.withValues(alpha: 0.12),
           radius: 20,
           child: Icon(icon, color: iconColor, size: 20),
         ),

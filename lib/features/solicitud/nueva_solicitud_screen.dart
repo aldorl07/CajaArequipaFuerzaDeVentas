@@ -82,8 +82,11 @@ class _NuevaSolicitudScreenState extends State<NuevaSolicitudScreen> {
 
   Future<void> _simulateCapture(bool isFront) async {
     setState(() {
-      if (isFront) _isCapturingFront = true;
-      else _isCapturingBack = true;
+      if (isFront) {
+        _isCapturingFront = true;
+      } else {
+        _isCapturingBack = true;
+      }
     });
 
     // Simulate shutter delay
@@ -238,6 +241,7 @@ class _NuevaSolicitudScreenState extends State<NuevaSolicitudScreen> {
     } else {
       // Queue locally in provider count
       await syncProv.updatePendingCount();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Sin conexión. Solicitud guardada localmente en Firestore (se sincronizará automáticamente).'),
@@ -246,6 +250,7 @@ class _NuevaSolicitudScreenState extends State<NuevaSolicitudScreen> {
       );
     }
 
+    if (!mounted) return;
     // Go back to dashboard list
     Navigator.of(context).pop();
   }
@@ -271,7 +276,7 @@ class _NuevaSolicitudScreenState extends State<NuevaSolicitudScreen> {
                   margin: const EdgeInsets.only(bottom: 16),
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: AppColors.amarilloMostaza.withOpacity(0.15),
+                    color: AppColors.amarilloMostaza.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: AppColors.amarilloMostaza, width: 0.5),
                   ),
@@ -403,7 +408,7 @@ class _NuevaSolicitudScreenState extends State<NuevaSolicitudScreen> {
 
                       // Term (Plazo)
                       DropdownButtonFormField<String>(
-                        value: _selectedTerm,
+                        initialValue: _selectedTerm,
                         decoration: const InputDecoration(
                           labelText: 'Plazo (Meses)',
                           prefixIcon: Icon(Icons.calendar_today_outlined, color: AppColors.azulMarino),
@@ -423,7 +428,7 @@ class _NuevaSolicitudScreenState extends State<NuevaSolicitudScreen> {
 
                       // Destination
                       DropdownButtonFormField<String>(
-                        value: _selectedDestination,
+                        initialValue: _selectedDestination,
                         decoration: const InputDecoration(
                           labelText: 'Destino del Crédito',
                           prefixIcon: Icon(Icons.storefront_outlined, color: AppColors.azulMarino),
@@ -520,7 +525,7 @@ class _NuevaSolicitudScreenState extends State<NuevaSolicitudScreen> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: _bureauColor!.withOpacity(0.12),
+                            color: _bureauColor!.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: _bureauColor!, width: 1),
                           ),
@@ -603,7 +608,7 @@ class _NuevaSolicitudScreenState extends State<NuevaSolicitudScreen> {
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(6),
                           child: Container(
-                            color: AppColors.turquesaOscuro.withOpacity(0.1),
+                            color: AppColors.turquesaOscuro.withValues(alpha: 0.1),
                             padding: const EdgeInsets.all(8),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -620,7 +625,7 @@ class _NuevaSolicitudScreenState extends State<NuevaSolicitudScreen> {
                                   width: 25,
                                   height: 30,
                                   decoration: BoxDecoration(
-                                    color: AppColors.azulMarino.withOpacity(0.2),
+                                    color: AppColors.azulMarino.withValues(alpha: 0.2),
                                     borderRadius: BorderRadius.circular(2),
                                   ),
                                   child: const Icon(Icons.person, size: 20, color: Colors.white70),
