@@ -155,42 +155,8 @@ class AuthOficialViewModel extends ChangeNotifier {
 
     } catch (e) {
       debugPrint('Error on login Firestore query: $e');
-      // Offline fallback: check hardcoded list to ensure offline resilience on first run
-      final List<Map<String, String>> fallbackOfficers = [
-        {'code': 'OF12345', 'name': 'Aldo Requena'},
-        {'code': 'OF10001', 'name': 'Carlos Mendoza'},
-        {'code': 'OF10002', 'name': 'Ana Gómez'},
-        {'code': 'OF10003', 'name': 'Luis Flores'},
-        {'code': 'OF10004', 'name': 'Diana Castro'},
-        {'code': 'OF10005', 'name': 'Fernando Torres'},
-      ];
-
-      final index = fallbackOfficers.indexWhere((o) => o['code'] == upperCode);
-      if (index != -1 && password == 'caja123') {
-        _isSuccess = true;
-        _employeeCode = upperCode;
-        _officerName = fallbackOfficers[index]['name']!;
-        _userRole = 'operador';
-        _failedAttempts = 0;
-        _lockoutUntil = null;
-        _isLoading = false;
-
-        await _saveLockoutState();
-
-        try {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('logged_in_officer_code', _employeeCode!);
-          await prefs.setString('logged_in_officer_name', _officerName!);
-          await prefs.setString('logged_in_officer_role', _userRole);
-        } catch (_) {}
-
-        notifyListeners();
-        return true;
-      }
-
-      // General error fallback
       _isLoading = false;
-      _errorMessage = 'Error de conexión o credenciales incorrectas.';
+      _errorMessage = 'Error al conectar con la base de datos o credenciales incorrectas.';
       notifyListeners();
       return false;
     }
