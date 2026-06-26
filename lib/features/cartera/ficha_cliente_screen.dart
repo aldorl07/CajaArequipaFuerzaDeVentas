@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme.dart';
 import '../solicitud/nueva_solicitud_screen.dart';
+import 'registrar_desertor_screen.dart';
 
 class FichaClienteScreen extends StatefulWidget {
   final String clientDni;
@@ -86,6 +87,40 @@ class _FichaClienteScreenState extends State<FichaClienteScreen> {
     final double savingsBalance = _client!['savings_balance'] ?? 0.0;
     final double currentLoanBalance = _client!['current_loan_balance'] ?? 0.0;
     final String behavior = _client!['payment_behavior'] ?? 'Excelente';
+    final bool isDesertor = _client!['status'] == 'Desertor' || (_client!['isDeserted'] ?? false);
+
+    // Pre-evaluación Express logic
+    String preEvalStatus;
+    String preEvalMessage;
+    Color preEvalColor;
+    IconData preEvalIcon;
+    int bureauScore;
+
+    if (isDesertor) {
+      preEvalStatus = 'CLIENTE DESERTOR';
+      preEvalMessage = 'Este cliente se encuentra registrado como DESERTOR. Motivo: ${_client!['desertion_details']?['motivo_desercion'] ?? 'No especificado'}.';
+      preEvalColor = AppColors.rojoCoral;
+      preEvalIcon = Icons.person_off_outlined;
+      bureauScore = 0;
+    } else if (behavior == 'Excelente') {
+      preEvalStatus = 'PRE-APROBADO (Apto)';
+      preEvalMessage = 'El cliente califica para una oferta recurrente de hasta S/ 50,000 con Tasa Preferencial de 22.5% TEA. Aprobación inmediata.';
+      preEvalColor = AppColors.verdeCesped;
+      preEvalIcon = Icons.check_circle;
+      bureauScore = 780;
+    } else if (behavior == 'Regular') {
+      preEvalStatus = 'APROBADO CONDICIONAL';
+      preEvalMessage = 'El cliente califica para un crédito de hasta S/ 15,000. Requiere sustento de ingresos complementario y firma de aval solidario.';
+      preEvalColor = AppColors.amarilloMostaza;
+      preEvalIcon = Icons.info_outline;
+      bureauScore = 620;
+    } else {
+      preEvalStatus = 'NO APTO / RECHAZADO';
+      preEvalMessage = 'No elegible para financiamiento. El cliente presenta un nivel de riesgo crítico con atrasos SBS superiores a 30 días.';
+      preEvalColor = AppColors.rojoCoral;
+      preEvalIcon = Icons.cancel_outlined;
+      bureauScore = 340;
+    }
 
     // Risk tier colors
     Color riskColor;
@@ -331,22 +366,127 @@ class _FichaClienteScreenState extends State<FichaClienteScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+
+            // Pre-evaluación Express (RF-42 & Use Case)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              child: Text(
+                'Pre-evaluación Express (Buró)',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.azulMarino,
+                ),
+              ),
+            ),
+            Card(
+              color: preEvalColor.withValues(alpha: 0.05),
+              shape: RoundedRectangleBorder(
+                side: BorderSide(color: preEvalColor, width: 1.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(preEvalIcon, color: preEvalColor, size: 24),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            preEvalStatus,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: preEvalColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      preEvalMessage,
+                      style: const TextStyle(fontSize: 13, color: AppColors.textoOscuro),
+                    ),
+                    const SizedBox(height: 12),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Score de Buró (Simulado):',
+                          style: TextStyle(fontSize: 12, color: AppColors.textoMutado),
+                        ),
+                        Text(
+                          bureauScore > 0 ? '$bureauScore pts' : 'N/A',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textoOscuro),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 24),
 
-            // Main CTA Button
-            SizedBox(
-              height: 52,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => NuevaSolicitudScreen(prefilledDni: dni),
+            // Action Buttons
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!isDesertor) ...[
+                  SizedBox(
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => NuevaSolicitudScreen(prefilledDni: dni),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.add, size: 20),
+                      label: const Text('NUEVA SOLICITUD DE CRÉDITO'),
                     ),
-                  );
-                },
-                icon: const Icon(Icons.add, size: 20),
-                label: const Text('NUEVA SOLICITUD DE CRÉDITO'),
-              ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                SizedBox(
+                  height: 52,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.rojoCoral,
+                      side: const BorderSide(color: AppColors.rojoCoral, width: 1.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    onPressed: () async {
+                      final result = await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => RegistrarDesertorScreen(
+                            clientDni: dni,
+                            clientName: name,
+                          ),
+                        ),
+                      );
+                      if (result == true) {
+                        // Refresh client details
+                        _loadClientDetails();
+                      }
+                    },
+                    icon: Icon(isDesertor ? Icons.edit_note : Icons.person_off_outlined, size: 20),
+                    label: Text(
+                      isDesertor ? 'MODIFICAR DESERCIÓN' : 'REGISTRAR DESERCIÓN',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
           ],

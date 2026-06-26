@@ -14,6 +14,7 @@ import '../cobranza/recuperacion_mora_screen.dart';
 import '../reportes/reportes_supervision_screen.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/sync_service.dart';
+import 'alertas_campanas_screen.dart';
 
 class CarteraDiariaScreen extends StatefulWidget {
   const CarteraDiariaScreen({super.key});
@@ -105,6 +106,62 @@ class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
     }
   }
 
+  void _simulateNightlyDownload(BuildContext context) {
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.of(context).pop(); // Close drawer
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        double progress = 0.0;
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            Future.delayed(const Duration(milliseconds: 150), () {
+              if (progress < 1.0) {
+                setDialogState(() {
+                  progress += 0.15;
+                  if (progress > 1.0) progress = 1.0;
+                });
+              }
+            });
+
+            if (progress >= 1.0) {
+              Future.delayed(const Duration(milliseconds: 200), () {
+                if (ctx.mounted) {
+                  Navigator.of(ctx).pop();
+                }
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('Descarga nocturna completada. Cartera diaria sincronizada localmente (WorkManager).'),
+                    backgroundColor: AppColors.verdeCesped,
+                  ),
+                );
+              });
+            }
+
+            return AlertDialog(
+              title: const Text('Descarga Nocturna (WorkManager)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Simulando tarea en segundo plano de descarga de cartera para hoy...', style: TextStyle(fontSize: 12)),
+                  const SizedBox(height: 16),
+                  LinearProgressIndicator(
+                    value: progress,
+                    color: AppColors.turquesaBrillante,
+                    backgroundColor: Colors.grey[200],
+                  ),
+                  const SizedBox(height: 8),
+                  Text('${(progress * 100).toStringAsFixed(0)}%', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildDrawer(BuildContext context, AuthOficialViewModel authVM, SyncProvider syncProv) {
     final role = authVM.userRole;
     final isSupervisor = role == 'Supervisor' || role == 'Administrador';
@@ -186,6 +243,16 @@ class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
                   leading: const Icon(Icons.payments_outlined, color: AppColors.azulMarino),
                   title: const Text('Recuperación de Mora (Cobranza)', style: TextStyle(color: AppColors.textoOscuro)),
                   onTap: () => _navigateToScreen(const RecuperacionMoraScreen()),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.campaign_outlined, color: AppColors.azulMarino),
+                  title: const Text('Alertas y Campañas', style: TextStyle(color: AppColors.textoOscuro)),
+                  onTap: () => _navigateToScreen(const AlertasCampanasScreen()),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.cloud_download_outlined, color: AppColors.azulMarino),
+                  title: const Text('Descarga Nocturna (Simular)', style: TextStyle(color: AppColors.textoOscuro)),
+                  onTap: () => _simulateNightlyDownload(context),
                 ),
                 if (isSupervisor) ...[
                   const Divider(),
@@ -406,19 +473,62 @@ class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
   }
 }
 
-// Cartera Visitas Tab UI (HU-V02)
-class CarteraVisitasTab extends StatelessWidget {
+// Cartera Visitas Tab UI (HU-V02 & Use Cases)
+class CarteraVisitasTab extends StatefulWidget {
   const CarteraVisitasTab({super.key});
+
+  @override
+  State<CarteraVisitasTab> createState() => _CarteraVisitasTabState();
+}
+
+class _CarteraVisitasTabState extends State<CarteraVisitasTab> {
+  String _searchQuery = '';
+  String _statusFilter = 'Todos'; // 'Todos', 'Pendiente', 'Visitado', 'Desertor'
+  String _typeFilter = 'Todos';   // 'Todos', 'Renovación', 'Nuevo', 'Cobranza'
 
   @override
   Widget build(BuildContext context) {
     final authVM = Provider.of<AuthOficialViewModel>(context);
     final carteraVM = Provider.of<CarteraViewModel>(context);
 
-    // Calculation progress percentage
-    final double progress = carteraVM.totalVisits > 0 
-        ? carteraVM.completedVisits / carteraVM.totalVisits 
+    // Apply filters
+    final filteredClients = carteraVM.clients.where((client) {
+      // 1. Search filter
+      if (_searchQuery.isNotEmpty) {
+        final nameMatch = client.name.toLowerCase().contains(_searchQuery.toLowerCase());
+        final dniMatch = client.dni.contains(_searchQuery);
+        if (!nameMatch && !dniMatch) return false;
+      }
+
+      // 2. Status filter
+      if (_statusFilter == 'Pendiente') {
+        if (client.isVisited || client.status == 'Desertor') return false;
+      } else if (_statusFilter == 'Visitado') {
+        if (!client.isVisited || client.status == 'Desertor') return false;
+      } else if (_statusFilter == 'Desertor') {
+        if (client.status != 'Desertor') return false;
+      } else {
+        // 'Todos' shows all active (non-deserted) clients by default
+        if (client.status == 'Desertor') return false;
+      }
+
+      // 3. Management type filter
+      if (_typeFilter != 'Todos') {
+        if (client.managementType != _typeFilter) return false;
+      }
+
+      return true;
+    }).toList();
+
+    // Calculation progress percentage for active visits only
+    final activeClients = carteraVM.clients.where((c) => c.status != 'Desertor').toList();
+    final completedActive = activeClients.where((c) => c.isVisited).length;
+    final double progress = activeClients.isNotEmpty 
+        ? completedActive / activeClients.length 
         : 0.0;
+
+    // We can only reorder when NO filters are active
+    final bool canReorder = _searchQuery.isEmpty && _statusFilter == 'Todos' && _typeFilter == 'Todos';
 
     return Column(
       children: [
@@ -426,28 +536,49 @@ class CarteraVisitasTab extends StatelessWidget {
         Container(
           width: double.infinity,
           color: AppColors.azulMarino,
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Hola, ${authVM.officerName ?? "Oficial"}',
-                style: const TextStyle(
-                  color: AppColors.turquesaBrillante,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Hola, ${authVM.officerName ?? "Oficial"}',
+                        style: const TextStyle(
+                          color: AppColors.turquesaBrillante,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Código de Empleado: OF12345',
+                        style: TextStyle(color: Colors.white60, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Badge(
+                      label: Text('3', style: TextStyle(fontSize: 8, color: Colors.white)),
+                      child: Icon(Icons.notifications_outlined, color: Colors.white),
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const AlertasCampanasScreen()),
+                      );
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 2),
-              const Text(
-                'Código de Empleado: OF12345',
-                style: TextStyle(color: Colors.white60, fontSize: 11),
-              ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               
               // Progress Box
               Container(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
@@ -459,13 +590,13 @@ class CarteraVisitasTab extends StatelessWidget {
                       children: [
                         const Text(
                           'Progreso de Visitas del Día:',
-                          style: TextStyle(color: AppColors.blancoPuro, fontSize: 12, fontWeight: FontWeight.w500),
+                          style: TextStyle(color: AppColors.blancoPuro, fontSize: 11, fontWeight: FontWeight.w500),
                         ),
                         Text(
-                          '${carteraVM.completedVisits} / ${carteraVM.totalVisits} completadas',
+                          '$completedActive / ${activeClients.length} completadas',
                           style: const TextStyle(
                             color: AppColors.amarilloMostaza,
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -484,34 +615,137 @@ class CarteraVisitasTab extends StatelessWidget {
           ),
         ),
 
+        // SEARCH BAR
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          child: TextField(
+            style: const TextStyle(color: AppColors.textoOscuro, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Buscar por nombre o DNI...',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              suffixIcon: _searchQuery.isNotEmpty 
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () => setState(() => _searchQuery = ''),
+                    )
+                  : null,
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+            ),
+            onChanged: (val) {
+              setState(() {
+                _searchQuery = val;
+              });
+            },
+          ),
+        ),
+
+        // FILTER CHIPS ROW
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Row(
+            children: [
+              _buildFilterChip('Estado: Todos', _statusFilter == 'Todos', () => setState(() => _statusFilter = 'Todos')),
+              const SizedBox(width: 4),
+              _buildFilterChip('Pendientes', _statusFilter == 'Pendiente', () => setState(() => _statusFilter = 'Pendiente')),
+              const SizedBox(width: 4),
+              _buildFilterChip('Visitados', _statusFilter == 'Visitado', () => setState(() => _statusFilter = 'Visitado')),
+              const SizedBox(width: 4),
+              _buildFilterChip('Desertores', _statusFilter == 'Desertor', () => setState(() => _statusFilter = 'Desertor')),
+              
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                child: Text('|', style: TextStyle(color: Colors.grey)),
+              ),
+
+              _buildFilterChip('Tipos: Todos', _typeFilter == 'Todos', () => setState(() => _typeFilter = 'Todos')),
+              const SizedBox(width: 4),
+              _buildFilterChip('Renovación', _typeFilter == 'Renovación', () => setState(() => _typeFilter = 'Renovación')),
+              const SizedBox(width: 4),
+              _buildFilterChip('Nuevos', _typeFilter == 'Nuevo', () => setState(() => _typeFilter = 'Nuevo')),
+              const SizedBox(width: 4),
+              _buildFilterChip('Cobranza', _typeFilter == 'Cobranza', () => setState(() => _typeFilter = 'Cobranza')),
+            ],
+          ),
+        ),
+
         // Visits List title
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Align(
             alignment: Alignment.centerLeft,
-            child: Text(
-              'Clientes a Visitar Hoy',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: AppColors.azulMarino,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Clientes a Visitar Hoy',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.azulMarino,
+                  ),
+                ),
+                if (canReorder && filteredClients.length > 1)
+                  const Row(
+                    children: [
+                      Icon(Icons.drag_indicator, size: 14, color: AppColors.textoMutado),
+                      SizedBox(width: 4),
+                      Text('Mantener presionado para ordenar', style: TextStyle(fontSize: 10, color: AppColors.textoMutado)),
+                    ],
+                  ),
+              ],
             ),
           ),
         ),
 
         // List body
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.only(bottom: 80),
-            itemCount: carteraVM.clients.length,
-            itemBuilder: (context, index) {
-              final client = carteraVM.clients[index];
-              return _buildVisitCard(context, carteraVM, client, index);
-            },
-          ),
+          child: filteredClients.isEmpty
+              ? const Center(
+                  child: Text(
+                    'No se encontraron clientes con los filtros aplicados.',
+                    style: TextStyle(color: AppColors.textoMutado, fontSize: 12),
+                  ),
+                )
+              : canReorder
+                  ? ReorderableListView.builder(
+                      padding: const EdgeInsets.only(bottom: 80),
+                      itemCount: filteredClients.length,
+                      onReorder: (oldIndex, newIndex) {
+                        carteraVM.reorderClients(oldIndex, newIndex);
+                      },
+                      itemBuilder: (context, index) {
+                        final client = filteredClients[index];
+                        return Container(
+                          key: ValueKey(client.dni),
+                          child: _buildVisitCard(context, carteraVM, client, index, true),
+                        );
+                      },
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 80),
+                      itemCount: filteredClients.length,
+                      itemBuilder: (context, index) {
+                        final client = filteredClients[index];
+                        return _buildVisitCard(context, carteraVM, client, index, false);
+                      },
+                    ),
         ),
       ],
+    );
+  }
+
+  Widget _buildFilterChip(String label, bool isSelected, VoidCallback onTap) {
+    return ChoiceChip(
+      label: Text(label, style: TextStyle(fontSize: 10, color: isSelected ? Colors.white : AppColors.textoOscuro)),
+      selected: isSelected,
+      onSelected: (_) => onTap(),
+      selectedColor: AppColors.azulMarino,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: isSelected ? AppColors.azulMarino : Colors.grey[300]!),
+      ),
     );
   }
 
@@ -519,34 +753,42 @@ class CarteraVisitasTab extends StatelessWidget {
     BuildContext context, 
     CarteraViewModel carteraVM, 
     VisitClient client, 
-    int index
+    int index,
+    bool isReorderable,
   ) {
-    // Choose color for management badges
     Color badgeColor;
-    switch (client.managementType.toLowerCase()) {
-      case 'renovación':
-        badgeColor = AppColors.amarilloMostaza;
-        break;
-      case 'nuevo':
-        badgeColor = AppColors.turquesaOscuro;
-        break;
-      case 'cobranza':
-        badgeColor = AppColors.rojoCoral;
-        break;
-      default:
-        badgeColor = AppColors.textoMutado;
+    if (client.status == 'Desertor') {
+      badgeColor = AppColors.rojoCoral;
+    } else {
+      switch (client.managementType.toLowerCase()) {
+        case 'renovación':
+          badgeColor = AppColors.amarilloMostaza;
+          break;
+        case 'nuevo':
+          badgeColor = AppColors.turquesaOscuro;
+          break;
+        case 'cobranza':
+          badgeColor = AppColors.rojoCoral;
+          break;
+        default:
+          badgeColor = AppColors.textoMutado;
+      }
     }
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(12.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Row 1: Name & Status Switch
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (isReorderable)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 8.0, top: 4.0),
+                    child: Icon(Icons.drag_handle, color: Colors.grey, size: 20),
+                  ),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -554,7 +796,7 @@ class CarteraVisitasTab extends StatelessWidget {
                       Text(
                         client.name,
                         style: const TextStyle(
-                          fontSize: 15,
+                          fontSize: 14.5,
                           fontWeight: FontWeight.bold,
                           color: AppColors.azulMarino,
                         ),
@@ -562,67 +804,79 @@ class CarteraVisitasTab extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         'DNI: ${client.dni}',
-                        style: const TextStyle(color: AppColors.textoMutado, fontSize: 12),
+                        style: const TextStyle(color: AppColors.textoMutado, fontSize: 11.5),
                       ),
                     ],
                   ),
                 ),
                 
-                // Visited check
-                Column(
-                  children: [
-                    Switch(
-                      value: client.isVisited,
-                      activeThumbColor: AppColors.verdeCesped,
-                      activeTrackColor: AppColors.verdeCesped.withValues(alpha: 0.5),
-                      onChanged: (val) {
-                        carteraVM.toggleVisitStatus(index);
-                      },
-                    ),
-                    Text(
-                      client.isVisited ? 'VISITADO' : 'PENDIENTE',
-                      style: TextStyle(
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.bold,
-                        color: client.isVisited ? AppColors.verdeCesped : AppColors.textoMutado,
+                // Visited check / Deserted tag
+                if (client.status != 'Desertor')
+                  Column(
+                    children: [
+                      Switch(
+                        value: client.isVisited,
+                        activeThumbColor: AppColors.verdeCesped,
+                        activeTrackColor: AppColors.verdeCesped.withValues(alpha: 0.5),
+                        onChanged: (val) {
+                          carteraVM.toggleVisitStatus(index);
+                        },
                       ),
+                      Text(
+                        client.isVisited ? 'VISITADO' : 'PENDIENTE',
+                        style: TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.bold,
+                          color: client.isVisited ? AppColors.verdeCesped : AppColors.textoMutado,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.rojoCoral.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: AppColors.rojoCoral, width: 0.5),
                     ),
-                  ],
-                ),
+                    child: const Text(
+                      'DESERTOR',
+                      style: TextStyle(color: AppColors.rojoCoral, fontSize: 8, fontWeight: FontWeight.bold),
+                    ),
+                  ),
               ],
             ),
             
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
               client.address,
-              style: const TextStyle(color: AppColors.textoMutado, fontSize: 11),
+              style: const TextStyle(color: AppColors.textoMutado, fontSize: 10.5),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             const Divider(height: 1),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
 
-            // Row 3: Badges and Actions
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   children: [
-                    // Management type badge
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                       decoration: BoxDecoration(
                         color: badgeColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: badgeColor, width: 0.5),
                       ),
                       child: Text(
-                        client.managementType,
+                        client.status == 'Desertor' ? 'DESERTOR' : client.managementType,
                         style: TextStyle(
                           color: badgeColor,
-                          fontSize: 9,
+                          fontSize: 8.5,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -630,17 +884,16 @@ class CarteraVisitasTab extends StatelessWidget {
                     const SizedBox(width: 8),
                     Text(
                       'Ref: S/ ${client.amount.toStringAsFixed(0)}',
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textoOscuro),
+                      style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: AppColors.textoOscuro),
                     ),
                   ],
                 ),
                 Row(
                   children: [
-                    // Ficha Button
                     TextButton(
                       style: TextButton.styleFrom(
                         foregroundColor: AppColors.azulMarino,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                       onPressed: () {
@@ -650,28 +903,28 @@ class CarteraVisitasTab extends StatelessWidget {
                           ),
                         );
                       },
-                      child: const Text('Ver Ficha', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      child: const Text('Ver Ficha', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
                     ),
                     const SizedBox(width: 4),
-                    // Nueva Solicitud Button
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.turquesaBrillante,
-                        foregroundColor: AppColors.azulMarino,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    if (client.status != 'Desertor')
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.turquesaBrillante,
+                          foregroundColor: AppColors.azulMarino,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          textStyle: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => NuevaSolicitudScreen(prefilledDni: client.dni),
+                            ),
+                          );
+                        },
+                        child: const Text('Solicitud'),
                       ),
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => NuevaSolicitudScreen(prefilledDni: client.dni),
-                          ),
-                        );
-                      },
-                      child: const Text('Solicitud'),
-                    ),
                   ],
                 ),
               ],
