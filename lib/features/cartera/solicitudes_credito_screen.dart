@@ -92,7 +92,20 @@ class SolicitudesCreditoScreen extends StatelessWidget {
 
           final docs = snapshot.data?.docs ?? [];
 
-          if (docs.isEmpty) {
+          // Ordenar en memoria para priorizar las solicitudes más recientes (nuevas solicitudes arriba)
+          final sortedDocs = List<QueryDocumentSnapshot>.from(docs);
+          sortedDocs.sort((a, b) {
+            final aData = a.data() as Map<String, dynamic>;
+            final bData = b.data() as Map<String, dynamic>;
+            final aTime = aData['request_date'] as Timestamp?;
+            final bTime = bData['request_date'] as Timestamp?;
+            if (aTime == null && bTime == null) return 0;
+            if (aTime == null) return 1;
+            if (bTime == null) return -1;
+            return bTime.compareTo(aTime); // Descendente
+          });
+
+          if (sortedDocs.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -133,9 +146,9 @@ class SolicitudesCreditoScreen extends StatelessWidget {
 
           return ListView.builder(
             padding: const EdgeInsets.all(12),
-            itemCount: docs.length,
+            itemCount: sortedDocs.length,
             itemBuilder: (context, index) {
-              final doc = docs[index];
+              final doc = sortedDocs[index];
               final data = doc.data() as Map<String, dynamic>;
               final String id = doc.id;
               final String dni = data['dni'] ?? '';

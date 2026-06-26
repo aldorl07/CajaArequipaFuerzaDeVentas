@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme.dart';
 import '../auth/auth_oficial_view_model.dart';
@@ -234,10 +235,45 @@ class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
                   title: const Text('Borradores de Solicitud', style: TextStyle(color: AppColors.textoOscuro)),
                   onTap: () => _navigateToScreen(const BorradoresScreen()),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.rate_review_outlined, color: AppColors.azulMarino),
-                  title: const Text('Solicitudes de Crédito', style: TextStyle(color: AppColors.textoOscuro)),
-                  onTap: () => _navigateToScreen(const SolicitudesCreditoScreen()),
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('credit_requests')
+                      .where('status', isEqualTo: 'Pendiente')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    int pendingCount = 0;
+                    if (snapshot.hasData) {
+                      pendingCount = snapshot.data!.docs.length;
+                    }
+
+                    return ListTile(
+                      leading: const Icon(Icons.rate_review_outlined, color: AppColors.azulMarino),
+                      title: const Text('Solicitudes de Crédito', style: TextStyle(color: AppColors.textoOscuro)),
+                      trailing: pendingCount > 0
+                          ? Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: const BoxDecoration(
+                                color: AppColors.rojoCoral,
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 20,
+                                minHeight: 20,
+                              ),
+                              child: Text(
+                                '$pendingCount',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            )
+                          : null,
+                      onTap: () => _navigateToScreen(const SolicitudesCreditoScreen()),
+                    );
+                  },
                 ),
                 ListTile(
                   leading: const Icon(Icons.calculate_outlined, color: AppColors.azulMarino),
