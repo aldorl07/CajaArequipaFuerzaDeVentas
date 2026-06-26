@@ -34,17 +34,35 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
     _subscription?.cancel();
     _subscription = FirebaseFirestore.instance
         .collection('credit_requests')
-        .orderBy('created_at', descending: true)
         .snapshots()
         .listen((snapshot) {
+      final list = snapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          ...data,
+          'id_doc': doc.id,
+        };
+      }).toList();
+
+      // Ordenar en memoria (descendente por fecha)
+      list.sort((a, b) {
+        final aTime = a['request_date'] ?? a['created_at'];
+        final bTime = b['request_date'] ?? b['created_at'];
+        
+        if (aTime == null && bTime == null) return 0;
+        if (aTime == null) return 1;
+        if (bTime == null) return -1;
+        
+        if (aTime is Timestamp && bTime is Timestamp) {
+          return bTime.compareTo(aTime);
+        }
+        final String aStr = aTime.toString();
+        final String bStr = bTime.toString();
+        return bStr.compareTo(aStr);
+      });
+
       setState(() {
-        _requests = snapshot.docs.map((doc) {
-          final data = doc.data();
-          return {
-            ...data,
-            'id_doc': doc.id,
-          };
-        }).toList();
+        _requests = list;
         _isLoading = false;
       });
     }, onError: (e) {
@@ -297,18 +315,24 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
   Widget _buildRequestCard(Map<String, dynamic> req) {
     final String idDoc = req['id_doc'] ?? '';
     final String clientName = req['client_name'] ?? 'Cliente';
-    final String clientDni = req['client_dni'] ?? '--------';
+    final String clientDni = req['client_dni'] ?? req['dni'] ?? '--------';
     final double amount = (req['amount'] as num?)?.toDouble() ?? 0.0;
     final int term = req['term_months'] ?? 12;
     final String status = req['status'] ?? 'Draft';
-    final String createdAtStr = req['created_at'] ?? '';
     
+    final requestDateVal = req['request_date'] ?? req['created_at'] ?? '';
     String dateFormatted = '';
-    try {
-      final dt = DateTime.parse(createdAtStr);
-      dateFormatted = DateFormat('dd/MM/yyyy HH:mm').format(dt);
-    } catch (_) {
-      dateFormatted = createdAtStr;
+    if (requestDateVal is Timestamp) {
+      dateFormatted = DateFormat('dd/MM/yyyy HH:mm').format(requestDateVal.toDate());
+    } else if (requestDateVal is String && requestDateVal.isNotEmpty) {
+      try {
+        final dt = DateTime.parse(requestDateVal);
+        dateFormatted = DateFormat('dd/MM/yyyy HH:mm').format(dt);
+      } catch (_) {
+        dateFormatted = requestDateVal;
+      }
+    } else {
+      dateFormatted = requestDateVal.toString();
     }
 
     // Determine color & icon based on status
