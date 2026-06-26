@@ -17,7 +17,7 @@ class _LoginOficialScreenState extends State<LoginOficialScreen> {
   final _codeController = TextEditingController(text: 'OF12345');
   final _passwordController = TextEditingController(text: 'caja123');
   bool _obscurePassword = true;
-  String _selectedRole = 'Supervisor'; // Default to Supervisor for easy grading access
+
   Timer? _countdownTimer;
 
   @override
@@ -68,7 +68,6 @@ class _LoginOficialScreenState extends State<LoginOficialScreen> {
       final success = await authVM.login(
         _codeController.text,
         _passwordController.text,
-        role: _selectedRole,
       );
 
       if (success && mounted) {
@@ -237,27 +236,7 @@ class _LoginOficialScreenState extends State<LoginOficialScreen> {
                               return null;
                             },
                           ),
-                          const SizedBox(height: 16),
 
-                          // Role Selector Dropdown (evaluator helper)
-                          DropdownButtonFormField<String>(
-                            initialValue: _selectedRole,
-                            decoration: const InputDecoration(
-                              labelText: 'Perfil / Rol en Agencia',
-                              prefixIcon: Icon(Icons.supervised_user_circle_outlined, color: AppColors.azulMarino),
-                            ),
-                            dropdownColor: AppColors.blancoPuro,
-                            items: const [
-                              DropdownMenuItem(value: 'Operador', child: Text('Operador (Asesor)', style: TextStyle(color: AppColors.textoOscuro))),
-                              DropdownMenuItem(value: 'Supervisor', child: Text('Supervisor (Jefe)', style: TextStyle(color: AppColors.textoOscuro))),
-                              DropdownMenuItem(value: 'Administrador', child: Text('Administrador', style: TextStyle(color: AppColors.textoOscuro))),
-                            ],
-                            onChanged: authVM.isLockedOut
-                                ? null
-                                : (val) {
-                                    if (val != null) setState(() => _selectedRole = val);
-                                  },
-                          ),
                           
                           // Error indicator
                           if (authVM.errorMessage != null) ...[

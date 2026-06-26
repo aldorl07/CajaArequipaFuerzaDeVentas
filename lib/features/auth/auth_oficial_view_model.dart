@@ -7,7 +7,7 @@ class AuthOficialViewModel extends ChangeNotifier {
   String? _errorMessage;
   String? _employeeCode;
   String? _officerName;
-  String _userRole = 'Operador';
+  String _userRole = 'operador';
   int _failedAttempts = 0;
   DateTime? _lockoutUntil;
 
@@ -85,7 +85,7 @@ class AuthOficialViewModel extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<bool> login(String code, String password, {String role = 'Operador'}) async {
+  Future<bool> login(String code, String password) async {
     _isLoading = true;
     _errorMessage = null;
     _isSuccess = false;
@@ -107,7 +107,7 @@ class AuthOficialViewModel extends ChangeNotifier {
       _isSuccess = true;
       _employeeCode = 'OF12345';
       _officerName = 'Aldo Requena';
-      _userRole = role;
+      _userRole = 'operador';
       _failedAttempts = 0;
       _lockoutUntil = null;
       _isLoading = false;

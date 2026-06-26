@@ -164,7 +164,6 @@ class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
 
   Widget _buildDrawer(BuildContext context, AuthOficialViewModel authVM, SyncProvider syncProv) {
     final role = authVM.userRole;
-    final isSupervisor = role == 'Supervisor' || role == 'Administrador';
 
     return Drawer(
       backgroundColor: AppColors.blancoPuro,
@@ -198,7 +197,7 @@ class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: isSupervisor ? AppColors.amarilloMostaza : AppColors.turquesaOscuro,
+                    color: AppColors.turquesaOscuro,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -254,14 +253,12 @@ class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
                   title: const Text('Descarga Nocturna (Simular)', style: TextStyle(color: AppColors.textoOscuro)),
                   onTap: () => _simulateNightlyDownload(context),
                 ),
-                if (isSupervisor) ...[
-                  const Divider(),
-                  ListTile(
-                    leading: const Icon(Icons.bar_chart_outlined, color: AppColors.amarilloMostaza),
-                    title: const Text('Reportes y Supervisión', style: TextStyle(color: AppColors.textoOscuro, fontWeight: FontWeight.bold)),
-                    onTap: () => _navigateToScreen(const ReportesSupervisionScreen()),
-                  ),
-                ],
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.bar_chart_outlined, color: AppColors.amarilloMostaza),
+                  title: const Text('Reportes y Supervisión', style: TextStyle(color: AppColors.textoOscuro, fontWeight: FontWeight.bold)),
+                  onTap: () => _navigateToScreen(const ReportesSupervisionScreen()),
+                ),
               ],
             ),
           ),
