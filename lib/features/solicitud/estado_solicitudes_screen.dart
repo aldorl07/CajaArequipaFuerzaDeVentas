@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme.dart';
+import '../cartera/evaluar_credito_wizard_screen.dart';
 
 class EstadoSolicitudesScreen extends StatefulWidget {
   const EstadoSolicitudesScreen({super.key});
@@ -58,7 +59,7 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
     return _requests.where((r) {
       final String status = r['status'] ?? '';
       if (_selectedFilter == 'Pendientes') {
-        return status == 'PendingSync' || status == 'Draft';
+        return status == 'PendingSync' || status == 'Draft' || status == 'Pendiente';
       } else if (_selectedFilter == 'Evaluación') {
         return status == 'Syncing' || status == 'Enviado' || status == 'En Evaluación';
       } else if (_selectedFilter == 'Aprobados') {
@@ -96,6 +97,46 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
       }
     } catch (e) {
       debugPrint('Error clearing Firestore collection: $e');
+    }
+  }
+
+  Future<void> _evaluarSolicitud(
+    BuildContext context, {
+    required String id,
+    required String dni,
+    required double amount,
+    required bool aprobar,
+  }) async {
+    final firestore = FirebaseFirestore.instance;
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      if (aprobar) {
+        // En esta pantalla, la aprobación se delega al wizard
+      } else {
+        await firestore.collection('credit_requests').doc(id).update({
+          'status': 'Rechazado',
+        });
+
+        if (context.mounted) {
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('Solicitud de crédito RECHAZADA.'),
+              backgroundColor: AppColors.rojoCoral,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error evaluando solicitud de crédito: $e');
+      if (context.mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Error al evaluar la solicitud: $e'),
+            backgroundColor: AppColors.rojoCoral,
+          ),
+        );
+      }
     }
   }
 
@@ -179,6 +220,63 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
 
   Widget _buildFilterButton(String label) {
     final isSelected = _selectedFilter == label;
+    
+    Widget content;
+    if (label == 'Pendientes') {
+      final pendingCount = _requests.where((r) => r['status'] == 'Pendiente').length;
+      if (pendingCount > 0) {
+        content = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? AppColors.azulMarino : AppColors.blancoPuro,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.all(5),
+              decoration: const BoxDecoration(
+                color: AppColors.rojoCoral,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                '$pendingCount',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  height: 1.0,
+                ),
+              ),
+            ),
+          ],
+        );
+      } else {
+        content = Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? AppColors.azulMarino : AppColors.blancoPuro,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            fontSize: 12,
+          ),
+        );
+      }
+    } else {
+      content = Text(
+        label,
+        style: TextStyle(
+          color: isSelected ? AppColors.azulMarino : AppColors.blancoPuro,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          fontSize: 12,
+        ),
+      );
+    }
+
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -191,14 +289,7 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
           color: isSelected ? AppColors.turquesaBrillante : Colors.transparent,
           borderRadius: BorderRadius.circular(4),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? AppColors.azulMarino : AppColors.blancoPuro,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 12,
-          ),
-        ),
+        child: content,
       ),
     );
   }
@@ -266,6 +357,11 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
         statusIcon = Icons.cancel;
         statusLabel = 'Rechazado';
         break;
+      case 'Pendiente':
+        statusColor = AppColors.amarilloMostaza;
+        statusIcon = Icons.pending_actions;
+        statusLabel = 'Pendiente';
+        break;
       default:
         statusColor = AppColors.textoMutado;
         statusIcon = Icons.help_outline;
@@ -274,6 +370,7 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
     return Card(
       child: ExpansionTile(
         key: PageStorageKey<String>(idDoc),
+        initiallyExpanded: status == 'Pendiente',
         leading: CircleAvatar(
           backgroundColor: statusColor.withValues(alpha: 0.12),
           child: Icon(statusIcon, color: statusColor, size: 20),
@@ -325,6 +422,65 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
                 ),
                 const SizedBox(height: 16),
                 _buildFlowStepper(status),
+
+                if (status == 'Pendiente') ...[
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.rojoCoral.withValues(alpha: 0.12),
+                          foregroundColor: AppColors.rojoCoral,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        ),
+                        onPressed: () => _evaluarSolicitud(
+                          context,
+                          id: idDoc,
+                          dni: clientDni,
+                          amount: amount,
+                          aprobar: false,
+                        ),
+                        icon: const Icon(Icons.close, size: 16),
+                        label: const Text(
+                          'Rechazar solicitud de crédito',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.turquesaBrillante,
+                          foregroundColor: AppColors.azulMarino,
+                          elevation: 1,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        ),
+                        onPressed: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => EvaluarCreditoWizardScreen(
+                                requestId: idDoc,
+                                clientDni: clientDni,
+                                clientName: clientName,
+                                creditType: req['credit_type'] ?? 'Crédito MYPE',
+                                amount: amount,
+                                term: term,
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.rate_review_outlined, size: 16),
+                        label: const Text(
+                          'Evaluar crédito',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -342,7 +498,7 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
     if (currentStatus == 'PendingSync') activeIndex = 0;
     if (currentStatus == 'Syncing') activeIndex = 0; // showing sync trigger
     if (currentStatus == 'Enviado') activeIndex = 1;
-    if (currentStatus == 'En Evaluación') activeIndex = 2;
+    if (currentStatus == 'En Evaluación' || currentStatus == 'Pendiente') activeIndex = 2;
     if (currentStatus == 'Aprobado') activeIndex = 3;
     if (currentStatus == 'Desembolsado') activeIndex = 4;
     if (currentStatus == 'Rechazado') activeIndex = 2; // failed during evaluation

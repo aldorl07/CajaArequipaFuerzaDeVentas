@@ -471,30 +471,57 @@ class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
           Expanded(child: screens[_currentIndex]),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
+      bottomNavigationBar: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('credit_requests')
+            .where('status', isEqualTo: 'Pendiente')
+            .snapshots(),
+        builder: (context, snapshot) {
+          final pendingCount = snapshot.data?.docs.length ?? 0;
+          return NavigationBar(
+            selectedIndex: _currentIndex,
+            onDestinationSelected: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+            destinations: [
+              const NavigationDestination(
+                icon: Icon(Icons.people_outline),
+                selectedIcon: Icon(Icons.people),
+                label: 'Cartera Diaria',
+              ),
+              const NavigationDestination(
+                icon: Icon(Icons.map_outlined),
+                selectedIcon: Icon(Icons.map),
+                label: 'Mapa Ruta',
+              ),
+              NavigationDestination(
+                icon: pendingCount > 0
+                    ? Badge(
+                        backgroundColor: AppColors.rojoCoral,
+                        label: Text(
+                          '$pendingCount',
+                          style: const TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                        child: const Icon(Icons.assignment_outlined),
+                      )
+                    : const Icon(Icons.assignment_outlined),
+                selectedIcon: pendingCount > 0
+                    ? Badge(
+                        backgroundColor: AppColors.rojoCoral,
+                        label: Text(
+                          '$pendingCount',
+                          style: const TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                        child: const Icon(Icons.assignment),
+                      )
+                    : const Icon(Icons.assignment),
+                label: 'Solicitudes',
+              ),
+            ],
+          );
         },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
-            label: 'Cartera Diaria',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map),
-            label: 'Mapa Ruta',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.assignment_outlined),
-            selectedIcon: Icon(Icons.assignment),
-            label: 'Solicitudes',
-          ),
-        ],
       ),
       floatingActionButton: _currentIndex == 0
           ? FloatingActionButton(
