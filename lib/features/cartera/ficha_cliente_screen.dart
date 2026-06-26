@@ -14,6 +14,7 @@ class FichaClienteScreen extends StatefulWidget {
 
 class _FichaClienteScreenState extends State<FichaClienteScreen> {
   Map<String, dynamic>? _client;
+  Map<String, dynamic>? _activeRequest;
   bool _isLoading = true;
 
   @override
@@ -29,23 +30,103 @@ class _FichaClienteScreenState extends State<FichaClienteScreen> {
           .collection('clients')
           .doc(widget.clientDni)
           .get();
+
       if (docSnapshot.exists) {
+        // Consultar si tiene una solicitud de crédito pendiente
+        final requestsSnapshot = await FirebaseFirestore.instance
+            .collection('credit_requests')
+            .where('dni', isEqualTo: widget.clientDni)
+            .where('status', isEqualTo: 'Pendiente')
+            .limit(1)
+            .get();
+
         setState(() {
           _client = docSnapshot.data();
+          if (requestsSnapshot.docs.isNotEmpty) {
+            _activeRequest = requestsSnapshot.docs.first.data();
+            _activeRequest!['id'] = requestsSnapshot.docs.first.id;
+          } else {
+            _activeRequest = null;
+          }
           _isLoading = false;
         });
       } else {
         setState(() {
           _client = null;
+          _activeRequest = null;
           _isLoading = false;
         });
       }
     } catch (e) {
-      debugPrint('Error loading client from Firestore: $e');
+      debugPrint('Error loading client/requests from Firestore: $e');
       setState(() {
         _client = null;
+        _activeRequest = null;
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _evaluarSolicitud(
+    BuildContext context, {
+    required String id,
+    required String dni,
+    required double amount,
+    required bool aprobar,
+  }) async {
+    final firestore = FirebaseFirestore.instance;
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      if (aprobar) {
+        await firestore.runTransaction((transaction) async {
+          final clientRef = firestore.collection('clients').doc(dni);
+          final requestRef = firestore.collection('credit_requests').doc(id);
+
+          final clientDoc = await transaction.get(clientRef);
+          if (!clientDoc.exists) {
+            throw Exception('El cliente con DNI $dni no está registrado en la base de datos de Fuerza de Ventas.');
+          }
+
+          final clientData = clientDoc.data()!;
+          final double savingsBalance = (clientData['savings_balance'] as num?)?.toDouble() ?? 0.0;
+
+          transaction.update(requestRef, {'status': 'Aprobado'});
+          transaction.update(clientRef, {
+            'current_loan_balance': amount,
+            'savings_balance': savingsBalance + amount,
+          });
+        });
+
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Solicitud de crédito APROBADA con éxito. Saldo y deuda actualizados en Firestore.'),
+            backgroundColor: AppColors.verdeCesped,
+          ),
+        );
+      } else {
+        await firestore.collection('credit_requests').doc(id).update({
+          'status': 'Rechazado',
+        });
+
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Solicitud de crédito RECHAZADA.'),
+            backgroundColor: AppColors.rojoCoral,
+          ),
+        );
+      }
+      
+      // Recargar datos
+      _loadClientDetails();
+    } catch (e) {
+      debugPrint('Error evaluando solicitud de crédito en Ficha: $e');
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Error al evaluar la solicitud: $e'),
+          backgroundColor: AppColors.rojoCoral,
+        ),
+      );
     }
   }
 
@@ -438,54 +519,103 @@ class _FichaClienteScreenState extends State<FichaClienteScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (!isDesertor) ...[
+                if (_activeRequest != null) ...[
                   SizedBox(
                     height: 52,
                     child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => NuevaSolicitudScreen(prefilledDni: dni),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.add, size: 20),
-                      label: const Text('NUEVA SOLICITUD DE CRÉDITO'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.verdeCesped,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: () => _evaluarSolicitud(
+                        context,
+                        id: _activeRequest!['id'],
+                        dni: dni,
+                        amount: (_activeRequest!['amount'] as num).toDouble(),
+                        aprobar: true,
+                      ),
+                      icon: const Icon(Icons.check, size: 20),
+                      label: const Text('APROBAR SOLICITUD DE CRÉDITO'),
                     ),
                   ),
                   const SizedBox(height: 12),
-                ],
-                SizedBox(
-                  height: 52,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.rojoCoral,
-                      side: const BorderSide(color: AppColors.rojoCoral, width: 1.5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                  SizedBox(
+                    height: 52,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.rojoCoral,
+                        side: const BorderSide(color: AppColors.rojoCoral, width: 1.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: () => _evaluarSolicitud(
+                        context,
+                        id: _activeRequest!['id'],
+                        dni: dni,
+                        amount: (_activeRequest!['amount'] as num).toDouble(),
+                        aprobar: false,
+                      ),
+                      icon: const Icon(Icons.close, size: 20),
+                      label: const Text(
+                        'RECHAZAR SOLICITUD DE CRÉDITO',
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
-                    onPressed: () async {
-                      final result = await Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => RegistrarDesertorScreen(
-                            clientDni: dni,
-                            clientName: name,
-                          ),
+                  ),
+                ] else ...[
+                  if (!isDesertor) ...[
+                    SizedBox(
+                      height: 52,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => NuevaSolicitudScreen(prefilledDni: dni),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.add, size: 20),
+                        label: const Text('NUEVA SOLICITUD DE CRÉDITO'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  SizedBox(
+                    height: 52,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.rojoCoral,
+                        side: const BorderSide(color: AppColors.rojoCoral, width: 1.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                      );
-                      if (result == true) {
-                        // Refresh client details
-                        _loadClientDetails();
-                      }
-                    },
-                    icon: Icon(isDesertor ? Icons.edit_note : Icons.person_off_outlined, size: 20),
-                    label: Text(
-                      isDesertor ? 'MODIFICAR DESERCIÓN' : 'REGISTRAR DESERCIÓN',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () async {
+                        final result = await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => RegistrarDesertorScreen(
+                              clientDni: dni,
+                              clientName: name,
+                            ),
+                          ),
+                        );
+                        if (result == true) {
+                          // Refresh client details
+                          _loadClientDetails();
+                        }
+                      },
+                      icon: Icon(isDesertor ? Icons.edit_note : Icons.person_off_outlined, size: 20),
+                      label: Text(
+                        isDesertor ? 'MODIFICAR DESERCIÓN' : 'REGISTRAR DESERCIÓN',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
             const SizedBox(height: 20),
