@@ -15,6 +15,7 @@ import '../reportes/reportes_supervision_screen.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/sync_service.dart';
 import 'alertas_campanas_screen.dart';
+import 'solicitudes_credito_screen.dart';
 
 class CarteraDiariaScreen extends StatefulWidget {
   const CarteraDiariaScreen({super.key});
@@ -232,6 +233,11 @@ class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
                   leading: const Icon(Icons.folder_open_outlined, color: AppColors.azulMarino),
                   title: const Text('Borradores de Solicitud', style: TextStyle(color: AppColors.textoOscuro)),
                   onTap: () => _navigateToScreen(const BorradoresScreen()),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.rate_review_outlined, color: AppColors.azulMarino),
+                  title: const Text('Solicitudes de Crédito', style: TextStyle(color: AppColors.textoOscuro)),
+                  onTap: () => _navigateToScreen(const SolicitudesCreditoScreen()),
                 ),
                 ListTile(
                   leading: const Icon(Icons.calculate_outlined, color: AppColors.azulMarino),
