@@ -111,6 +111,58 @@ class FirebaseSeeder {
       } else {
         debugPrint('Firestore clients collection already seeded.');
       }
+
+      // Seed officers collection
+      final officersSnapshot = await firestore.collection('officers').limit(1).get();
+      if (officersSnapshot.docs.isEmpty) {
+        debugPrint('Seeding Firestore officers collection...');
+        final List<Map<String, dynamic>> mockOfficers = [
+          {
+            'code': 'OF12345',
+            'name': 'Aldo Requena',
+            'password': 'caja123',
+            'role': 'operador',
+          },
+          {
+            'code': 'OF10001',
+            'name': 'Carlos Mendoza',
+            'password': 'caja123',
+            'role': 'operador',
+          },
+          {
+            'code': 'OF10002',
+            'name': 'Ana Gómez',
+            'password': 'caja123',
+            'role': 'operador',
+          },
+          {
+            'code': 'OF10003',
+            'name': 'Luis Flores',
+            'password': 'caja123',
+            'role': 'operador',
+          },
+          {
+            'code': 'OF10004',
+            'name': 'Diana Castro',
+            'password': 'caja123',
+            'role': 'operador',
+          },
+          {
+            'code': 'OF10005',
+            'name': 'Fernando Torres',
+            'password': 'caja123',
+            'role': 'operador',
+          },
+        ];
+
+        for (var officer in mockOfficers) {
+          final String code = officer['code'];
+          await firestore.collection('officers').doc(code).set(officer);
+        }
+        debugPrint('Firestore officers collection seeded successfully.');
+      } else {
+        debugPrint('Firestore officers collection already seeded.');
+      }
     } catch (e) {
       debugPrint('Error seeding Firestore database: $e');
     }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AuthOficialViewModel extends ChangeNotifier {
   bool _isLoading = false;
@@ -102,40 +103,94 @@ class AuthOficialViewModel extends ChangeNotifier {
     // Simulate network delay
     await Future.delayed(const Duration(milliseconds: 1000));
 
-    // Hardcoded credentials for Fuerza de Ventas officers (S9)
-    if (code.trim().toUpperCase() == 'OF12345' && password == 'caja123') {
-      _isSuccess = true;
-      _employeeCode = 'OF12345';
-      _officerName = 'Aldo Requena';
-      _userRole = 'operador';
-      _failedAttempts = 0;
-      _lockoutUntil = null;
-      _isLoading = false;
-      
-      await _saveLockoutState();
+    final String upperCode = code.trim().toUpperCase();
 
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('logged_in_officer_code', _employeeCode!);
-        await prefs.setString('logged_in_officer_name', _officerName!);
-        await prefs.setString('logged_in_officer_role', _userRole);
-      } catch (_) {}
+    try {
+      // Query Firestore officers collection (works offline using cache)
+      final doc = await FirebaseFirestore.instance.collection('officers').doc(upperCode).get();
 
-      notifyListeners();
-      return true;
-    } else {
+      if (doc.exists) {
+        final data = doc.data()!;
+        final String dbPassword = data['password'] ?? '';
+        final String dbName = data['name'] ?? 'Oficial';
+
+        if (password == dbPassword) {
+          _isSuccess = true;
+          _employeeCode = upperCode;
+          _officerName = dbName;
+          _userRole = 'operador';
+          _failedAttempts = 0;
+          _lockoutUntil = null;
+          _isLoading = false;
+
+          await _saveLockoutState();
+
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('logged_in_officer_code', _employeeCode!);
+            await prefs.setString('logged_in_officer_name', _officerName!);
+            await prefs.setString('logged_in_officer_role', _userRole);
+          } catch (_) {}
+
+          notifyListeners();
+          return true;
+        }
+      }
+
+      // If officer doesn't exist or password doesn't match
       _failedAttempts++;
       _isSuccess = false;
       _isLoading = false;
-      
+
       if (_failedAttempts >= 5) {
         _lockoutUntil = DateTime.now().add(const Duration(minutes: 30));
         _errorMessage = 'Superó los 5 intentos fallidos. Acceso bloqueado por 30 minutos.';
       } else {
-        _errorMessage = 'Código de empleado o contraseña incorrectos.\nIntentos restantes: ${5 - _failedAttempts}\nPruebe OF12345 / caja123';
+        _errorMessage = 'Código de empleado o contraseña incorrectos.\nIntentos restantes: ${5 - _failedAttempts}\nPruebe códigos del OF10001 al OF10005 o el OF12345 / caja123';
       }
-      
+
       await _saveLockoutState();
+      notifyListeners();
+      return false;
+
+    } catch (e) {
+      debugPrint('Error on login Firestore query: $e');
+      // Offline fallback: check hardcoded list to ensure offline resilience on first run
+      final List<Map<String, String>> fallbackOfficers = [
+        {'code': 'OF12345', 'name': 'Aldo Requena'},
+        {'code': 'OF10001', 'name': 'Carlos Mendoza'},
+        {'code': 'OF10002', 'name': 'Ana Gómez'},
+        {'code': 'OF10003', 'name': 'Luis Flores'},
+        {'code': 'OF10004', 'name': 'Diana Castro'},
+        {'code': 'OF10005', 'name': 'Fernando Torres'},
+      ];
+
+      final index = fallbackOfficers.indexWhere((o) => o['code'] == upperCode);
+      if (index != -1 && password == 'caja123') {
+        _isSuccess = true;
+        _employeeCode = upperCode;
+        _officerName = fallbackOfficers[index]['name']!;
+        _userRole = 'operador';
+        _failedAttempts = 0;
+        _lockoutUntil = null;
+        _isLoading = false;
+
+        await _saveLockoutState();
+
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('logged_in_officer_code', _employeeCode!);
+          await prefs.setString('logged_in_officer_name', _officerName!);
+          await prefs.setString('logged_in_officer_role', _userRole);
+        } catch (_) {}
+
+        notifyListeners();
+        return true;
+      }
+
+      // General error fallback
+      _isLoading = false;
+      _errorMessage = 'Error de conexión o credenciales incorrectas.';
       notifyListeners();
       return false;
     }
