@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme.dart';
+import 'evaluar_credito_wizard_screen.dart';
 
 class SolicitudesCreditoScreen extends StatelessWidget {
   const SolicitudesCreditoScreen({super.key});
@@ -289,30 +290,37 @@ class SolicitudesCreditoScreen extends StatelessWidget {
                             ),
                             icon: const Icon(Icons.close, size: 16),
                             label: const Text(
-                              'Rechazar',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              'Rechazar solicitud de crédito',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                             ),
                           ),
                           const SizedBox(width: 12),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.verdeCesped,
-                              foregroundColor: Colors.white,
+                              backgroundColor: AppColors.turquesaBrillante,
+                              foregroundColor: AppColors.azulMarino,
                               elevation: 1,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             ),
-                            onPressed: () => _evaluarSolicitud(
-                              context,
-                              id: id,
-                              dni: dni,
-                              amount: amount,
-                              aprobar: true,
-                            ),
-                            icon: const Icon(Icons.check, size: 16),
+                            onPressed: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => EvaluarCreditoWizardScreen(
+                                    requestId: id,
+                                    clientDni: dni,
+                                    clientName: clientName,
+                                    creditType: creditType,
+                                    amount: amount,
+                                    term: term,
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.rate_review_outlined, size: 16),
                             label: const Text(
-                              'Aprobar',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              'Evaluar crédito',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                             ),
                           ),
                         ],

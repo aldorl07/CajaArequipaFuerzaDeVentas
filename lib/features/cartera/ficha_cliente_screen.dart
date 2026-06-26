@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme.dart';
 import '../solicitud/nueva_solicitud_screen.dart';
 import 'registrar_desertor_screen.dart';
+import 'evaluar_credito_wizard_screen.dart';
 
 class FichaClienteScreen extends StatefulWidget {
   final String clientDni;
@@ -524,21 +525,31 @@ class _FichaClienteScreenState extends State<FichaClienteScreen> {
                     height: 52,
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.verdeCesped,
-                        foregroundColor: Colors.white,
+                        backgroundColor: AppColors.turquesaBrillante,
+                        foregroundColor: AppColors.azulMarino,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      onPressed: () => _evaluarSolicitud(
-                        context,
-                        id: _activeRequest!['id'],
-                        dni: dni,
-                        amount: (_activeRequest!['amount'] as num).toDouble(),
-                        aprobar: true,
-                      ),
-                      icon: const Icon(Icons.check, size: 20),
-                      label: const Text('APROBAR SOLICITUD DE CRÉDITO'),
+                      onPressed: () async {
+                        final result = await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => EvaluarCreditoWizardScreen(
+                              requestId: _activeRequest!['id'],
+                              clientDni: dni,
+                              clientName: name,
+                              creditType: _activeRequest!['credit_type'] ?? 'Crédito',
+                              amount: (_activeRequest!['amount'] as num).toDouble(),
+                              term: _activeRequest!['term_months'] ?? 12,
+                            ),
+                          ),
+                        );
+                        if (result == true) {
+                          _loadClientDetails();
+                        }
+                      },
+                      icon: const Icon(Icons.rate_review_outlined, size: 20),
+                      label: const Text('EVALUAR CRÉDITO', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                   const SizedBox(height: 12),
