@@ -6,6 +6,7 @@ import '../auth/auth_oficial_view_model.dart';
 import '../auth/login_oficial_screen.dart';
 import 'cartera_view_model.dart';
 import 'ficha_cliente_screen.dart';
+import 'evaluar_credito_wizard_screen.dart';
 import '../ruta/ruta_screen.dart';
 import '../solicitud/estado_solicitudes_screen.dart';
 import '../solicitud/nueva_solicitud_screen.dart';
@@ -822,182 +823,223 @@ class _CarteraVisitasTabState extends State<CarteraVisitasTab> {
     int index,
     bool isReorderable,
   ) {
-    Color badgeColor;
-    if (client.status == 'Desertor') {
-      badgeColor = AppColors.rojoCoral;
-    } else {
-      switch (client.managementType.toLowerCase()) {
-        case 'renovación':
-          badgeColor = AppColors.amarilloMostaza;
-          break;
-        case 'nuevo':
-          badgeColor = AppColors.turquesaOscuro;
-          break;
-        case 'cobranza':
-          badgeColor = AppColors.rojoCoral;
-          break;
-        default:
-          badgeColor = AppColors.textoMutado;
-      }
-    }
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('credit_requests')
+          .where('dni', isEqualTo: client.dni)
+          .where('status', isEqualTo: 'Pendiente')
+          .snapshots(),
+      builder: (context, snapshot) {
+        double displayAmount = client.amount;
+        String displayType = client.managementType;
+        bool hasPendingRequest = false;
+        Map<String, dynamic>? pendingRequestData;
+        String pendingRequestId = '';
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+          hasPendingRequest = true;
+          final doc = snapshot.data!.docs.first;
+          pendingRequestId = doc.id;
+          pendingRequestData = doc.data() as Map<String, dynamic>;
+          displayAmount = (pendingRequestData['amount'] as num?)?.toDouble() ?? client.amount;
+          displayType = pendingRequestData['credit_type'] ?? client.managementType;
+        }
+
+        Color badgeColor;
+        if (client.status == 'Desertor') {
+          badgeColor = AppColors.rojoCoral;
+        } else {
+          switch (displayType.toLowerCase()) {
+            case 'renovación':
+              badgeColor = AppColors.amarilloMostaza;
+              break;
+            case 'nuevo':
+            case 'crédito mype':
+            case 'crédito personal':
+              badgeColor = AppColors.turquesaOscuro;
+              break;
+            case 'cobranza':
+              badgeColor = AppColors.rojoCoral;
+              break;
+            default:
+              badgeColor = AppColors.turquesaOscuro;
+          }
+        }
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (isReorderable)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 8.0, top: 4.0),
-                    child: Icon(Icons.drag_handle, color: Colors.grey, size: 20),
-                  ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        client.name,
-                        style: const TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.azulMarino,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (isReorderable)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 8.0, top: 4.0),
+                        child: Icon(Icons.drag_handle, color: Colors.grey, size: 20),
+                      ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            client.name,
+                            style: const TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.azulMarino,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'DNI: ${client.dni}',
+                            style: const TextStyle(color: AppColors.textoMutado, fontSize: 11.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Visited check / Deserted tag
+                    if (client.status != 'Desertor')
+                      Column(
+                        children: [
+                          Switch(
+                            value: client.isVisited,
+                            activeThumbColor: AppColors.verdeCesped,
+                            activeTrackColor: AppColors.verdeCesped.withValues(alpha: 0.5),
+                            onChanged: (val) {
+                              carteraVM.toggleVisitStatus(index);
+                            },
+                          ),
+                          Text(
+                            client.isVisited ? 'VISITADO' : 'PENDIENTE',
+                            style: TextStyle(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.bold,
+                              color: client.isVisited ? AppColors.verdeCesped : AppColors.textoMutado,
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.rojoCoral.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: AppColors.rojoCoral, width: 0.5),
+                        ),
+                        child: const Text(
+                          'DESERTOR',
+                          style: TextStyle(color: AppColors.rojoCoral, fontSize: 8, fontWeight: FontWeight.bold),
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'DNI: ${client.dni}',
-                        style: const TextStyle(color: AppColors.textoMutado, fontSize: 11.5),
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
                 
-                // Visited check / Deserted tag
-                if (client.status != 'Desertor')
-                  Column(
-                    children: [
-                      Switch(
-                        value: client.isVisited,
-                        activeThumbColor: AppColors.verdeCesped,
-                        activeTrackColor: AppColors.verdeCesped.withValues(alpha: 0.5),
-                        onChanged: (val) {
-                          carteraVM.toggleVisitStatus(index);
-                        },
-                      ),
-                      Text(
-                        client.isVisited ? 'VISITADO' : 'PENDIENTE',
-                        style: TextStyle(
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.bold,
-                          color: client.isVisited ? AppColors.verdeCesped : AppColors.textoMutado,
-                        ),
-                      ),
-                    ],
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.rojoCoral.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: AppColors.rojoCoral, width: 0.5),
-                    ),
-                    child: const Text(
-                      'DESERTOR',
-                      style: TextStyle(color: AppColors.rojoCoral, fontSize: 8, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-              ],
-            ),
-            
-            const SizedBox(height: 4),
-            Text(
-              client.address,
-              style: const TextStyle(color: AppColors.textoMutado, fontSize: 10.5),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            
-            const SizedBox(height: 8),
-            const Divider(height: 1),
-            const SizedBox(height: 8),
+                const SizedBox(height: 4),
+                Text(
+                  client.address,
+                  style: const TextStyle(color: AppColors.textoMutado, fontSize: 10.5),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                
+                const SizedBox(height: 8),
+                const Divider(height: 1),
+                const SizedBox(height: 8),
 
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: badgeColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: badgeColor, width: 0.5),
-                      ),
-                      child: Text(
-                        client.status == 'Desertor' ? 'DESERTOR' : client.managementType,
-                        style: TextStyle(
-                          color: badgeColor,
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Ref: S/ ${client.amount.toStringAsFixed(0)}',
-                      style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: AppColors.textoOscuro),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.azulMarino,
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => FichaClienteScreen(clientDni: client.dni),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: badgeColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: badgeColor, width: 0.5),
                           ),
-                        );
-                      },
-                      child: const Text('Ver Ficha', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                    ),
-                    const SizedBox(width: 4),
-                    if (client.status != 'Desertor')
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.turquesaBrillante,
-                          foregroundColor: AppColors.azulMarino,
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          textStyle: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => NuevaSolicitudScreen(prefilledDni: client.dni),
+                          child: Text(
+                            client.status == 'Desertor' ? 'DESERTOR' : displayType,
+                            style: TextStyle(
+                              color: badgeColor,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.bold,
                             ),
-                          );
-                        },
-                        child: const Text('Solicitud'),
-                      ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Ref: S/ ${displayAmount.toStringAsFixed(0)}',
+                          style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: AppColors.textoOscuro),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.azulMarino,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => FichaClienteScreen(clientDni: client.dni),
+                              ),
+                            );
+                          },
+                          child: const Text('Ver Ficha', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 4),
+                        if (client.status != 'Desertor')
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.turquesaBrillante,
+                              foregroundColor: AppColors.azulMarino,
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              textStyle: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: () {
+                              if (hasPendingRequest && pendingRequestData != null) {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => EvaluarCreditoWizardScreen(
+                                      requestId: pendingRequestId,
+                                      clientDni: client.dni,
+                                      clientName: client.name,
+                                      creditType: displayType,
+                                      amount: displayAmount,
+                                      term: pendingRequestData!['term_months'] ?? 12,
+                                    ),
+                                  ),
+                                );
+                              } else {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => NuevaSolicitudScreen(prefilledDni: client.dni),
+                                  ),
+                                );
+                              }
+                            },
+                            child: Text(hasPendingRequest ? 'Evaluar' : 'Solicitud'),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
