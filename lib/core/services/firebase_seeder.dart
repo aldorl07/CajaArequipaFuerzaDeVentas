@@ -100,6 +100,24 @@ class FirebaseSeeder {
             'visit_order': 5,
             'isVisited': false,
             'managementType': 'Cobranza',
+          },
+          {
+            'dni': '12345678',
+            'name': 'Aldo Alexandre Requena Lavi',
+            'address': 'Av. Arequipa 456, Cercado',
+            'phone': '999888777',
+            'credit_renewal_amount': 0.0,
+            'credit_renewal_due_days': 0,
+            'credit_risk_tier': 'Bajo',
+            'savings_balance': 2000.0,
+            'current_loan_balance': 0.0,
+            'latitude': -16.3989,
+            'longitude': -71.5350,
+            'payment_behavior': 'Excelente',
+            'visit_scheduled': '2026-06-26',
+            'visit_order': 6,
+            'isVisited': false,
+            'managementType': 'Nuevo',
           }
         ];
 
@@ -111,6 +129,29 @@ class FirebaseSeeder {
       } else {
         debugPrint('Firestore clients collection already seeded.');
       }
+
+      // Asegurar que Aldo Alexandre Requena Lavi esté registrado en Firestore
+      // con saldo de 2000 soles y sin deudas.
+      final aldoClient = {
+        'dni': '12345678',
+        'name': 'Aldo Alexandre Requena Lavi',
+        'address': 'Av. Arequipa 456, Cercado',
+        'phone': '999888777',
+        'credit_renewal_amount': 0.0,
+        'credit_renewal_due_days': 0,
+        'credit_risk_tier': 'Bajo',
+        'savings_balance': 2000.0,
+        'current_loan_balance': 0.0,
+        'latitude': -16.3989,
+        'longitude': -71.5350,
+        'payment_behavior': 'Excelente',
+        'visit_scheduled': '2026-06-26',
+        'visit_order': 6,
+        'isVisited': false,
+        'managementType': 'Nuevo',
+      };
+      await firestore.collection('clients').doc('12345678').set(aldoClient);
+      debugPrint('Client Aldo Alexandre Requena Lavi seeded/updated explicitly.');
 
       // Seed officers collection
       final officersSnapshot = await firestore.collection('officers').limit(1).get();
