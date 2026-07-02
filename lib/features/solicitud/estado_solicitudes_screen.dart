@@ -449,8 +449,10 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
 
                 if (status == 'Pendiente') ...[
                   const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.end,
                     children: [
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
@@ -473,7 +475,6 @@ class _EstadoSolicitudesScreenState extends State<EstadoSolicitudesScreen> {
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                         ),
                       ),
-                      const SizedBox(width: 12),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.turquesaBrillante,
