@@ -127,6 +127,12 @@ class _EvaluarCreditoWizardScreenState extends State<EvaluarCreditoWizardScreen>
   bool _clienteFirmo = false;
   List<Offset?> _signaturePoints = [];
 
+  // Decisión del Comité
+  String _decision = 'Aprobado'; // 'Aprobado', 'Condicionado', 'Rechazado'
+  double _montoAprobado = 0.0;
+  final _montoAprobadoController = TextEditingController();
+  final _motivoRechazoController = TextEditingController();
+
   // Cálculos financieros
   late double _tea;
   late double _tem;
@@ -136,28 +142,67 @@ class _EvaluarCreditoWizardScreenState extends State<EvaluarCreditoWizardScreen>
   @override
   void initState() {
     super.initState();
+    _montoAprobado = widget.amount;
+    _montoAprobadoController.text = widget.amount.toStringAsFixed(0);
     _calcularValoresFinancieros();
+    _loadRequestDataAndCalculate();
+  }
+
+  @override
+  void dispose() {
+    _montoAprobadoController.dispose();
+    _motivoRechazoController.dispose();
+    super.dispose();
   }
 
   void _calcularValoresFinancieros() {
-    // Definimos TEA de acuerdo al tipo de crédito
+    _setDefaultTea();
+    _tem = pow(1 + _tea, 1 / 12) - 1;
+    final num factor = pow(1 + _tem, widget.term);
+    _cuota = _montoAprobado * (_tem * factor) / (factor - 1);
+    _totalPagar = _cuota * widget.term;
+  }
+
+  void _setDefaultTea() {
     if (widget.creditType.contains('MYPE')) {
-      _tea = 0.185; // 18.5%
+      _tea = 0.4092; // 40.92% (Con seguro por defecto)
     } else if (widget.creditType.contains('Hipotecario')) {
-      _tea = 0.089; // 8.9%
+      _tea = 0.089;
     } else if (widget.creditType.contains('Vehicular')) {
-      _tea = 0.120; // 12.0%
+      _tea = 0.120;
     } else {
-      _tea = 0.145; // 14.5% Personal por defecto
+      _tea = 0.145;
+    }
+  }
+
+  Future<void> _loadRequestDataAndCalculate() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('credit_requests')
+          .doc(widget.requestId)
+          .get();
+      if (doc.exists) {
+        final data = doc.data()!;
+        final double? dbTea = (data['tea'] as num?)?.toDouble();
+        if (dbTea != null) {
+          _tea = dbTea;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error al consultar datos de TEA: $e');
     }
 
-    // TEM = (1 + TEA)^(1/12) - 1
     _tem = pow(1 + _tea, 1 / 12) - 1;
+    _recalcularConMonto(_montoAprobado);
+    if (mounted) {
+      setState(() {});
+    }
+  }
 
-    // Cuota fija mensual (Método Francés)
-    // Cuota = P * (i * (1+i)^n) / ((1+i)^n - 1)
+  void _recalcularConMonto(double amount) {
+    _montoAprobado = amount;
     final num factor = pow(1 + _tem, widget.term);
-    _cuota = widget.amount * (_tem * factor) / (factor - 1);
+    _cuota = _montoAprobado * (_tem * factor) / (factor - 1);
     _totalPagar = _cuota * widget.term;
   }
 
@@ -166,7 +211,37 @@ class _EvaluarCreditoWizardScreenState extends State<EvaluarCreditoWizardScreen>
     final messenger = ScaffoldMessenger.of(context);
 
     try {
-      // Transacción atómica en Firestore para desembolso directo
+      if (_decision == 'Rechazado') {
+        final String motivo = _motivoRechazoController.text.trim();
+        if (motivo.isEmpty) {
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('Por favor, ingrese el motivo del rechazo.'),
+              backgroundColor: AppColors.rojoCoral,
+            ),
+          );
+          return;
+        }
+
+        await firestore.collection('credit_requests').doc(widget.requestId).update({
+          'status': 'Rechazado',
+          'rejection_reason': motivo,
+        });
+
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Crédito Rechazado y cerrado con éxito.'),
+            backgroundColor: AppColors.rojoCoral,
+          ),
+        );
+
+        if (context.mounted) {
+          Navigator.of(context).pop(true);
+        }
+        return;
+      }
+
+      // Si es Aprobado o Condicionado
       await firestore.runTransaction((transaction) async {
         final clientRef = firestore.collection('clients').doc(widget.clientDni);
         final requestRef = firestore.collection('credit_requests').doc(widget.requestId);
@@ -179,21 +254,26 @@ class _EvaluarCreditoWizardScreenState extends State<EvaluarCreditoWizardScreen>
         final clientData = clientDoc.data()!;
         final double savingsBalance = (clientData['savings_balance'] as num?)?.toDouble() ?? 0.0;
 
-        transaction.update(requestRef, {'status': 'Aprobado'});
+        transaction.update(requestRef, {
+          'status': _decision,
+          'approved_amount': _montoAprobado,
+          'monthly_installment': _cuota,
+          'total_payable': _totalPagar,
+        });
+
         transaction.update(clientRef, {
-          'current_loan_balance': widget.amount,
-          'savings_balance': savingsBalance + widget.amount,
+          'current_loan_balance': _montoAprobado,
+          'savings_balance': savingsBalance + _montoAprobado,
         });
       });
 
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Crédito Evaluado y Desembolsado con éxito en tiempo real.'),
+        SnackBar(
+          content: Text('Crédito ${_decision == "Condicionado" ? "Condicionado" : "Aprobado"} y Desembolsado con éxito.'),
           backgroundColor: AppColors.verdeCesped,
         ),
       );
 
-      // Regresar 2 niveles (o volver a la pantalla anterior refrescando los datos)
       if (context.mounted) {
         Navigator.of(context).pop(true);
       }
@@ -282,7 +362,9 @@ class _EvaluarCreditoWizardScreenState extends State<EvaluarCreditoWizardScreen>
                     padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
                   ),
                   child: Text(
-                    _currentStep == 2 ? 'Finalizar y Desembolsar' : 'Siguiente',
+                    _currentStep == 2
+                        ? (_decision == 'Rechazado' ? 'Finalizar y Rechazar' : 'Finalizar y Desembolsar')
+                        : 'Siguiente',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -340,9 +422,19 @@ class _EvaluarCreditoWizardScreenState extends State<EvaluarCreditoWizardScreen>
       return _validarNombre && _validarDni && _validarDireccion && _validarTelefono;
     }
     if (_currentStep == 1) {
-      return true; // Las condiciones son solo de visualización
+      if (_decision == 'Rechazado') {
+        return _motivoRechazoController.text.trim().isNotEmpty;
+      }
+      if (_decision == 'Condicionado') {
+        final double? parsed = double.tryParse(_montoAprobadoController.text);
+        return parsed != null && parsed > 0 && parsed <= widget.amount;
+      }
+      return true;
     }
     if (_currentStep == 2) {
+      if (_decision == 'Rechazado') {
+        return true; // No requiere firma ni visita para rechazar
+      }
       return _visitaRealizada && _clienteFirmo;
     }
     return false;
@@ -456,37 +548,147 @@ class _EvaluarCreditoWizardScreenState extends State<EvaluarCreditoWizardScreen>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text(
-          'Paso 2: Condiciones del Crédito',
+          'Paso 2: Decisión del Comité y Condiciones',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.azulMarino),
         ),
         const SizedBox(height: 8),
         const Text(
-          'Revise las tasas simuladas y el costo total a pagar del crédito.',
+          'Seleccione la decisión del comité de crédito y revise las condiciones financieras.',
           style: TextStyle(color: AppColors.textoMutado, fontSize: 13),
         ),
         const SizedBox(height: 16),
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                _buildFinanceRow('Tipo de Crédito', widget.creditType, isBold: true),
-                const Divider(height: 20),
-                _buildFinanceRow('Monto Solicitado', 'S/ ${widget.amount.toStringAsFixed(2)}', valueColor: AppColors.azulMarino, isBold: true),
-                _buildFinanceRow('Plazo Solicitado', '${widget.term} meses'),
-                const Divider(height: 20),
-                _buildFinanceRow('Tasa de Interés Anual (TEA)', '${(_tea * 100).toStringAsFixed(2)}% TEA', valueColor: AppColors.naranjaOcre),
-                _buildFinanceRow('Tasa de Interés Mensual (TEM)', '${(_tem * 100).toStringAsFixed(2)}% TEM', valueColor: AppColors.turquesaOscuro),
-                const Divider(height: 20),
-                _buildFinanceRow('Cuota Fija Estimada', 'S/ ${_cuota.toStringAsFixed(2)} / mes', valueColor: AppColors.verdeCesped, isBold: true),
-                _buildFinanceRow('Total de Intereses', 'S/ ${(_totalPagar - widget.amount).toStringAsFixed(2)}'),
-                _buildFinanceRow('Total a Pagar', 'S/ ${_totalPagar.toStringAsFixed(2)}', valueColor: AppColors.azulMarino, isBold: true),
-              ],
+        
+        const Text(
+          'Decisión del Comité:',
+          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textoOscuro, fontSize: 14),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: ChoiceChip(
+                label: const Text('Aprobar'),
+                selected: _decision == 'Aprobado',
+                selectedColor: AppColors.verdeCesped.withValues(alpha: 0.2),
+                labelStyle: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: _decision == 'Aprobado' ? AppColors.verdeCesped : AppColors.textoOscuro,
+                ),
+                onSelected: (val) {
+                  if (val) {
+                    setState(() {
+                      _decision = 'Aprobado';
+                      _recalcularConMonto(widget.amount);
+                    });
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ChoiceChip(
+                label: const Text('Condicionar'),
+                selected: _decision == 'Condicionado',
+                selectedColor: AppColors.amarilloMostaza.withValues(alpha: 0.2),
+                labelStyle: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: _decision == 'Condicionado' ? AppColors.amarilloMostaza : AppColors.textoOscuro,
+                ),
+                onSelected: (val) {
+                  if (val) {
+                    setState(() {
+                      _decision = 'Condicionado';
+                      final double valInput = double.tryParse(_montoAprobadoController.text) ?? widget.amount;
+                      _recalcularConMonto(valInput);
+                    });
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ChoiceChip(
+                label: const Text('Rechazar'),
+                selected: _decision == 'Rechazado',
+                selectedColor: AppColors.rojoCoral.withValues(alpha: 0.2),
+                labelStyle: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: _decision == 'Rechazado' ? AppColors.rojoCoral : AppColors.textoOscuro,
+                ),
+                onSelected: (val) {
+                  if (val) {
+                    setState(() {
+                      _decision = 'Rechazado';
+                    });
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        if (_decision == 'Condicionado') ...[
+          TextFormField(
+            controller: _montoAprobadoController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: 'Monto Aprobado Reducido (S/)',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              prefixIcon: const Icon(Icons.monetization_on_outlined, color: AppColors.azulMarino),
+            ),
+            onChanged: (val) {
+              final double? parsed = double.tryParse(val);
+              if (parsed != null && parsed > 0 && parsed <= widget.amount) {
+                setState(() {
+                  _recalcularConMonto(parsed);
+                });
+              }
+            },
+          ),
+          const SizedBox(height: 16),
+        ],
+
+        if (_decision == 'Rechazado') ...[
+          TextFormField(
+            controller: _motivoRechazoController,
+            maxLines: 2,
+            decoration: InputDecoration(
+              labelText: 'Motivo del Rechazo',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              prefixIcon: const Icon(Icons.report_problem_outlined, color: AppColors.rojoCoral),
+            ),
+            onChanged: (val) {
+              setState(() {});
+            },
+          ),
+          const SizedBox(height: 16),
+        ],
+
+        if (_decision != 'Rechazado')
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  _buildFinanceRow('Tipo de Crédito', widget.creditType, isBold: true),
+                  const Divider(height: 20),
+                  _buildFinanceRow('Monto Solicitado', 'S/ ${widget.amount.toStringAsFixed(2)}'),
+                  _buildFinanceRow('Monto Aprobado', 'S/ ${_montoAprobado.toStringAsFixed(2)}', valueColor: AppColors.azulMarino, isBold: true),
+                  _buildFinanceRow('Plazo', '${widget.term} meses'),
+                  const Divider(height: 20),
+                  _buildFinanceRow('Tasa de Interés Anual (TEA)', '${(_tea * 100).toStringAsFixed(2)}% TEA', valueColor: AppColors.naranjaOcre),
+                  _buildFinanceRow('Tasa de Interés Mensual (TEM)', '${(_tem * 100).toStringAsFixed(2)}% TEM', valueColor: AppColors.turquesaOscuro),
+                  const Divider(height: 20),
+                  _buildFinanceRow('Cuota Fija Estimada', 'S/ ${_cuota.toStringAsFixed(2)} / mes', valueColor: AppColors.verdeCesped, isBold: true),
+                  _buildFinanceRow('Total de Intereses', 'S/ ${(_totalPagar - _montoAprobado).toStringAsFixed(2)}'),
+                  _buildFinanceRow('Total a Pagar', 'S/ ${_totalPagar.toStringAsFixed(2)}', valueColor: AppColors.azulMarino, isBold: true),
+                ],
+              ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -512,6 +714,54 @@ class _EvaluarCreditoWizardScreenState extends State<EvaluarCreditoWizardScreen>
   }
 
   Widget _buildStep3Signature() {
+    if (_decision == 'Rechazado') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Paso 3: Confirmación de Rechazo',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.rojoCoral),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'El expediente se cerrará y no se registrarán cargos de desembolso.',
+            style: TextStyle(color: AppColors.textoMutado, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Resumen del Rechazo:',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.azulMarino, fontSize: 14),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildFinanceRow('Cliente', widget.clientName),
+                  _buildFinanceRow('DNI', widget.clientDni),
+                  _buildFinanceRow('Monto Solicitado', 'S/ ${widget.amount.toStringAsFixed(2)}'),
+                  const Divider(height: 20),
+                  const Text(
+                    'Motivo de Rechazo:',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.rojoCoral, fontSize: 12),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _motivoRechazoController.text.isNotEmpty ? _motivoRechazoController.text : '(Sin especificar)',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textoOscuro),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
